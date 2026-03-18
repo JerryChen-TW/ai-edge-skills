@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>AR Translator</title>
+  </head>
+  <body>
+    <script>
+      window['ai_edge_gallery_get_result'] = async (data) => {
+        try {
+          // Parse the parameters sent by the agent
+          const params = JSON.parse(data);
+          const langCode = params.language_code || 'es';
+          
+          // Define a user-friendly language name for the chat response
+          const langNames = {
+              'es': 'Spanish',
+              'fr': 'French',
+              'de': 'German',
+              'it': 'Italian',
+              'hi': 'Hindi'
+          };
+          const languageName = langNames[langCode] || langCode.toUpperCase();
+
+          // Launch the webview and pass the language code as a URL parameter
+          return JSON.stringify({
+            result: `Opening the AR Translator! Point your camera around to see objects translated into ${languageName}.`,
+            webview: {
+              url: `webview.html?lang=${langCode}`
+            }
+          });
+        } catch (e) {
+          return JSON.stringify({
+            result: "Oops, I had trouble parsing the language parameters.",
+            error: e.toString()
+          });
+        }
+      };
+    </script>
+  </body>
+</html>

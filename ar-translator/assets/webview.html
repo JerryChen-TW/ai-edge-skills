@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AR Translator</title>
+    <!-- Use Tailwind CSS for rapid styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background-color: #000; font-family: system-ui, -apple-system, sans-serif; }
+        #video-container { position: relative; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; }
+        
+        /* Hide the video element visually but keep it in the DOM so the camera stream stays active */
+        video { position: absolute; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; z-index: 1; }
+        
+        /* The canvas now handles rendering BOTH the live camera feed and the AR overlays */
+        canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+        
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; padding: 24px; }
+        .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.2); }
+    </style>
+</head>
+<body>
+    <div id="video-container">
+        <!-- Hidden video element to stream the camera feed -->
+        <video id="webcam" autoplay playsinline muted></video>
+        <!-- Canvas for drawing the AR bounding boxes -->
+        <canvas id="output_canvas"></canvas>
+        
+        <div id="ui-layer">
+            <!-- Top Status Bar (Now Draggable) -->
+            <div id="status-bar" class="glass-panel px-3 py-2 rounded-xl text-white shadow-md pointer-events-auto absolute top-6 left-6 cursor-grab active:cursor-grabbing touch-none select-none z-50">
+                <h1 class="text-base font-bold flex items-center gap-1.5 pointer-events-none">
+                    <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path></svg>
+                    MediaPipe AR Translator
+                </h1>
+                <p class="text-xs text-emerald-200 mt-0.5 pointer-events-none" id="status-text">Loading MediaPipe Models...</p>
+            </div>
+            
+            <!-- Start Button -->
+            <button id="start-btn" class="glass-panel px-8 py-4 rounded-full text-white font-bold text-lg pointer-events-auto self-center mb-10 hover:bg-white/20 transition-all shadow-2xl hidden transform active:scale-95 border-emerald-500/50 border-2 mt-auto">
+                Tap to Start AR Camera
+            </button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
+
+        const video = document.getElementById("webcam");
+        const canvasElement = document.getElementById("output_canvas");
+        const canvasCtx = canvasElement.getContext("2d");
+        const statusText = document.getElementById("status-text");
+        const startBtn = document.getElementById("start-btn");
+
+        let objectDetector;
+        let webcamRunning = false;
+        let lastVideoTime = -1;
+
+        // Get language from URL parameters (passed from script.js)
+        const urlParams = new URLSearchParams(window.location.search);
+        const targetLang = urlParams.get('lang') || 'es';
+
+        const langNames = { 'es': 'Spanish', 'fr': 'French', 'de': 'German', 'it': 'Italian', 'hi': 'Hindi' };
+
+        // Preloaded dictionary mapping COCO dataset classes to multiple languages
+        const dictionary = {
+            "person": { es: "La Persona", fr: "La Personne", de: "Die Person", it: "La Persona", hi: "व्यक्ति" },
+            "bicycle": { es: "La Bicicleta", fr: "Le Vélo", de: "Das Fahrrad", it: "La Bicicletta", hi: "साइकिल" },
+            "car": { es: "El Coche", fr: "La Voiture", de: "Das Auto", it: "L'Automobile", hi: "कार" },
+            "motorcycle": { es: "La Motocicleta", fr: "La Moto", de: "Das Motorrad", it: "La Motocicletta", hi: "मोटरसाइकिल" },
+            "airplane": { es: "El Avión", fr: "L'Avion", de: "Das Flugzeug", it: "L'Aereo", hi: "हवाई जहाज" },
+            "bus": { es: "El Autobús", fr: "Le Bus", de: "Der Bus", it: "L'Autobus", hi: "बस" },
+            "train": { es: "El Tren", fr: "Le Train", de: "Der Zug", it: "Il Treno", hi: "ट्रेन" },
+            "truck": { es: "El Camión", fr: "Le Camion", de: "Der LKW", it: "Il Camion", hi: "ट्रक" },
+            "boat": { es: "El Barco", fr: "Le Bateau", de: "Das Boot", it: "La Barca", hi: "नाव" },
+            "traffic light": { es: "El Semáforo", fr: "Le Feu de Circulation", de: "Die Ampel", it: "Il Semaforo", hi: "ट्रैफ़िक लाइट" },
+            "bird": { es: "El Pájaro", fr: "L'Oiseau", de: "Der Vogel", it: "L'Uccello", hi: "पक्षी" },
+            "cat": { es: "El Gato", fr: "Le Chat", de: "Die Katze", it: "Il Gatto", hi: "बिल्ली" },
+            "dog": { es: "El Perro", fr: "Le Chien", de: "Der Hund", it: "Il Cane", hi: "कुत्ता" },
+            "horse": { es: "El Caballo", fr: "Le Cheval", de: "Das Pferd", it: "Il Cavallo", hi: "घोड़ा" },
+            "backpack": { es: "La Mochila", fr: "Le Sac à Dos", de: "Der Rucksack", it: "Lo Zaino", hi: "बैकपैक" },
+            "umbrella": { es: "El Paraguas", fr: "Le Parapluie", de: "Der Regenschirm", it: "L'Ombrello", hi: "छाता" },
+            "handbag": { es: "El Bolso", fr: "Le Sac à Main", de: "Die Handtasche", it: "La Borsa", hi: "हैंडबैग" },
+            "tie": { es: "La Corbata", fr: "La Cravate", de: "Die Krawatte", it: "La Cravatta", hi: "टाई" },
+            "suitcase": { es: "La Maleta", fr: "La Valise", de: "Der Koffer", it: "La Valigia", hi: "सूटकेस" },
+            "bottle": { es: "La Botella", fr: "La Bouteille", de: "Die Flasche", it: "La Bottiglia", hi: "बोतल" },
+            "wine glass": { es: "La Copa de Vino", fr: "Le Verre à Vin", de: "Das Weinglas", it: "Il Calice", hi: "शराब का गिलास" },
+            "cup": { es: "La Taza", fr: "La Tasse", de: "Die Tasse", it: "La Tazza", hi: "कप" },
+            "fork": { es: "El Tenedor", fr: "La Fourchette", de: "Die Gabel", it: "La Forchetta", hi: "कांटा" },
+            "knife": { es: "El Cuchillo", fr: "Le Couteau", de: "Das Messer", it: "Il Coltello", hi: "चाकू" },
+            "spoon": { es: "La Cuchara", fr: "La Cuillère", de: "Der Löffel", it: "Il Cucchiaio", hi: "चम्मच" },
+            "bowl": { es: "El Tazón", fr: "Le Bol", de: "Die Schüssel", it: "La Ciotola", hi: "कटोरा" },
+            "banana": { es: "El Plátano", fr: "La Banane", de: "Die Banane", it: "La Banana", hi: "केला" },
+            "apple": { es: "La Manzana", fr: "La Pomme", de: "Der Apfel", it: "La Mela", hi: "सेब" },
+            "sandwich": { es: "El Sándwich", fr: "Le Sandwich", de: "Das Sandwich", it: "Il Panino", hi: "सैंडविच" },
+            "orange": { es: "La Naranja", fr: "L'Orange", de: "Die Orange", it: "L'Arancia", hi: "संतरा" },
+            "broccoli": { es: "El Brócoli", fr: "Le Brocoli", de: "Der Brokkoli", it: "I Broccoli", hi: "ब्रोकोली" },
+            "carrot": { es: "La Zanahoria", fr: "La Carotte", de: "Die Karotte", it: "La Carota", hi: "गाजर" },
+            "hot dog": { es: "El Perrito Caliente", fr: "Le Hot-Dog", de: "Der Hotdog", it: "L'Hot Dog", hi: "हॉट डॉग" },
+            "pizza": { es: "La Pizza", fr: "La Pizza", de: "Die Pizza", it: "La Pizza", hi: "पिज्जा" },
+            "donut": { es: "El Donut", fr: "Le Beignet", de: "Der Donut", it: "La Ciambella", hi: "डोनट" },
+            "cake": { es: "El Pastel", fr: "Le Gâteau", de: "Der Kuchen", it: "La Torta", hi: "केक" },
+            "chair": { es: "La Silla", fr: "La Chaise", de: "Der Stuhl", it: "La Sedia", hi: "कुर्सी" },
+            "couch": { es: "El Sofá", fr: "Le Canapé", de: "Das Sofa", it: "Il Divano", hi: "सोफा" },
+            "potted plant": { es: "La Planta", fr: "La Plante en Pot", de: "Die Topfpflanze", it: "La Pianta in Vaso", hi: "गमले का पौधा" },
+            "bed": { es: "La Cama", fr: "Le Lit", de: "Das Bett", it: "Il Letto", hi: "बिस्तर" },
+            "dining table": { es: "La Mesa", fr: "La Table à Manger", de: "Der Esstisch", it: "Il Tavolo", hi: "खाने की मेज" },
+            "toilet": { es: "El Inodoro", fr: "Les Toilettes", de: "Die Toilette", it: "Il WC", hi: "शौचालय" },
+            "tv": { es: "El Televisor", fr: "La Télévision", de: "Der Fernseher", it: "Il Televisore", hi: "टीवी" },
+            "laptop": { es: "La Computadora", fr: "L'Ordinateur", de: "Der Laptop", it: "Il Portatile", hi: "लैपटॉप" },
+            "mouse": { es: "El Ratón", fr: "La Souris", de: "Die Maus", it: "Il Mouse", hi: "माउस" },
+            "remote": { es: "El Mando", fr: "La Télécommande", de: "Die Fernbedienung", it: "Il Telecomando", hi: "रिमोट" },
+            "keyboard": { es: "El Teclado", fr: "Le Clavier", de: "Die Tastatur", it: "La Tastiera", hi: "कीबोर्ड" },
+            "cell phone": { es: "El Celular", fr: "Le Téléphone", de: "Das Handy", it: "Il Cellulare", hi: "मोबाइल फोन" },
+            "microwave": { es: "El Microondas", fr: "Le Micro-ondes", de: "Die Mikrowelle", it: "Il Microonde", hi: "माइक्रोवेव" },
+            "oven": { es: "El Horno", fr: "Le Four", de: "Der Ofen", it: "Il Forno", hi: "ओवन" },
+            "toaster": { es: "La Tostadora", fr: "Le Grille-pain", de: "Der Toaster", it: "Il Tostapane", hi: "टोस्टर" },
+            "sink": { es: "El Fregadero", fr: "L'Évier", de: "Das Waschbecken", it: "Il Lavandino", hi: "सिंक" },
+            "refrigerator": { es: "El Refrigerador", fr: "Le Réfrigérateur", de: "Der Kühlschrank", it: "Il Frigorifero", hi: "फ्रिज" },
+            "book": { es: "El Libro", fr: "Le Livre", de: "Das Buch", it: "Il Libro", hi: "किताब" },
+            "clock": { es: "El Reloj", fr: "L'Horloge", de: "Die Uhr", it: "L'Orologio", hi: "घड़ी" },
+            "vase": { es: "El Jarrón", fr: "Le Vase", de: "Die Vase", it: "Il Vaso", hi: "फूलदान" },
+            "scissors": { es: "Las Tijeras", fr: "Les Ciseaux", de: "Die Schere", it: "Le Forbici", hi: "कैंची" },
+            "teddy bear": { es: "El Oso de Peluche", fr: "L'Ours en Peluche", de: "Der Teddybär", it: "L'Orsacchiotto", hi: "टेडी बियर" },
+            "hair drier": { es: "El Secador de Pelo", fr: "Le Sèche-cheveux", de: "Der Haartrockner", it: "L'Asciugacapelli", hi: "हेयर ड्रायर" },
+            "toothbrush": { es: "El Cepillo de Dientes", fr: "La Brosse à Dents", de: "Die Zahnbürste", it: "Lo Spazzolino", hi: "टूथब्रश" }
+        };
+
+        const getTranslation = (word) => {
+            const lowerWord = word.toLowerCase();
+            if (dictionary[lowerWord] && dictionary[lowerWord][targetLang]) {
+                return dictionary[lowerWord][targetLang];
+            }
+            // Capitalize fallback English word
+            return word.charAt(0).toUpperCase() + word.slice(1); 
+        };
+
+        // --- Dragging Logic for Status Bar ---
+        const statusBar = document.getElementById("status-bar");
+        let isDragging = false, currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
+
+        function dragStart(e) {
+            if (e.type === "touchstart") {
+                initialX = e.touches[0].clientX - xOffset;
+                initialY = e.touches[0].clientY - yOffset;
+            } else {
+                initialX = e.clientX - xOffset;
+                initialY = e.clientY - yOffset;
+            }
+
+            if (e.target === statusBar || statusBar.contains(e.target)) {
+                isDragging = true;
+            }
+        }
+
+        function dragEnd() {
+            initialX = currentX;
+            initialY = currentY;
+            isDragging = false;
+        }
+
+        function drag(e) {
+            if (!isDragging) return;
+            e.preventDefault(); // Prevent scroll while dragging
+
+            if (e.type === "touchmove") {
+                currentX = e.touches[0].clientX - initialX;
+                currentY = e.touches[0].clientY - initialY;
+            } else {
+                currentX = e.clientX - initialX;
+                currentY = e.clientY - initialY;
+            }
+
+            xOffset = currentX;
+            yOffset = currentY;
+            statusBar.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+        }
+
+        statusBar.addEventListener("mousedown", dragStart);
+        statusBar.addEventListener("touchstart", dragStart, { passive: false });
+        document.addEventListener("mouseup", dragEnd);
+        document.addEventListener("touchend", dragEnd);
+        document.addEventListener("mousemove", drag);
+        document.addEventListener("touchmove", drag, { passive: false });
+        // --- End Dragging Logic ---
+
+        // Initialize MediaPipe Object Detector
+        async function initializeObjectDetector() {
+            try {
+                const vision = await FilesetResolver.forVisionTasks(
+                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+                );
+                objectDetector = await ObjectDetector.createFromOptions(vision, {
+                    baseOptions: {
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite0/float16/1/efficientdet_lite0.tflite",
+                        delegate: "GPU"
+                    },
+                    scoreThreshold: 0.55,
+                    runningMode: "VIDEO"
+                });
+                
+                const langLabel = langNames[targetLang] || targetLang.toUpperCase();
+                statusText.innerText = `Ready! Translating to ${langLabel}.`;
+                startBtn.classList.remove("hidden");
+            } catch (error) {
+                console.error("Error loading model:", error);
+                statusText.innerText = "Error loading AI model. Check your connection.";
+            }
+        }
+
+        initializeObjectDetector();
+
+        // Handle start AR Camera Button
+        startBtn.addEventListener("click", () => {
+            if (!objectDetector) return;
+            
+            startBtn.classList.add("hidden");
+            statusText.innerText = "Analyzing environment...";
+            
+            // Enable rear camera if available
+            const constraints = { video: { facingMode: "environment" } };
+
+            navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
+                video.srcObject = stream;
+                video.addEventListener("loadeddata", () => {
+                    webcamRunning = true;
+                    predictWebcam();
+                });
+            }).catch((err) => {
+                console.error("Camera error:", err);
+                statusText.innerText = "Camera permission denied.";
+                startBtn.classList.remove("hidden");
+            });
+        });
+
+        // Loop to predict frames and draw them
+        async function predictWebcam() {
+            if (!webcamRunning) return;
+
+            // Run detection when the video has a new frame
+            if (video.currentTime !== lastVideoTime) {
+                lastVideoTime = video.currentTime;
+                const detections = objectDetector.detectForVideo(video, performance.now());
+                drawDetections(detections);
+            }
+
+            // Keep looping
+            requestAnimationFrame(predictWebcam);
+        }
+
+        // Render AR Cards
+        function drawDetections(result) {
+            // Match canvas internal resolution to the exact window size
+            const displayWidth = window.innerWidth;
+            const displayHeight = window.innerHeight;
+            
+            if (canvasElement.width !== displayWidth || canvasElement.height !== displayHeight) {
+                canvasElement.width = displayWidth;
+                canvasElement.height = displayHeight;
+            }
+
+            // Clear the canvas for the new frame
+            canvasCtx.clearRect(0, 0, displayWidth, displayHeight);
+            
+            if (!video.videoWidth || !video.videoHeight) return;
+
+            // 1. Calculate dimensions to mimic 'object-fit: contain' behavior manually (Black Bars)
+            const videoRatio = video.videoWidth / video.videoHeight;
+            const displayRatio = displayWidth / displayHeight;
+            
+            let drawWidth, drawHeight, startX, startY;
+
+            if (displayRatio > videoRatio) {
+                // Screen is wider than video. Fit to height, black bars on sides.
+                drawHeight = displayHeight;
+                drawWidth = displayHeight * videoRatio;
+                startX = (displayWidth - drawWidth) / 2;
+                startY = 0;
+            } else {
+                // Screen is taller than video. Fit to width, black bars on top/bottom.
+                drawWidth = displayWidth;
+                drawHeight = displayWidth / videoRatio;
+                startX = 0;
+                startY = (displayHeight - drawHeight) / 2;
+            }
+            
+            // 2. Draw the live camera frame directly onto the canvas first (Background)
+            canvasCtx.drawImage(video, startX, startY, drawWidth, drawHeight);
+
+            // 3. The exact scale factor used to stretch the video frame
+            const scale = drawWidth / video.videoWidth; 
+
+            // 4. Draw AR Bounding Boxes perfectly synced to the drawn video (Foreground)
+            for (let detection of result.detections) {
+                const rawBbox = detection.boundingBox;
+                
+                // Map bounding box coordinates perfectly to our scaled & translated video
+                const bbox = {
+                    originX: (rawBbox.originX * scale) + startX,
+                    originY: (rawBbox.originY * scale) + startY,
+                    width: rawBbox.width * scale,
+                    height: rawBbox.height * scale
+                };
+
+                const category = detection.categories[0];
+                const englishName = category.categoryName;
+                const translatedName = getTranslation(englishName);
+                const score = Math.round(category.score * 100);
+
+                // --- 1. Draw Sleek Bounding Box ---
+                canvasCtx.lineWidth = 4;
+                canvasCtx.strokeStyle = "#10B981"; // Tailwind Emerald-500
+                
+                // Outer glow effect
+                canvasCtx.shadowColor = '#34D399'; 
+                canvasCtx.shadowBlur = 15;
+                
+                // Corner style brackets instead of a full box for a more "AR" look
+                const cornerLength = 30;
+                canvasCtx.beginPath();
+                // Top-Left
+                canvasCtx.moveTo(bbox.originX, bbox.originY + cornerLength);
+                canvasCtx.lineTo(bbox.originX, bbox.originY);
+                canvasCtx.lineTo(bbox.originX + cornerLength, bbox.originY);
+                // Top-Right
+                canvasCtx.moveTo(bbox.originX + bbox.width - cornerLength, bbox.originY);
+                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY);
+                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY + cornerLength);
+                // Bottom-Left
+                canvasCtx.moveTo(bbox.originX, bbox.originY + bbox.height - cornerLength);
+                canvasCtx.lineTo(bbox.originX, bbox.originY + bbox.height);
+                canvasCtx.lineTo(bbox.originX + cornerLength, bbox.originY + bbox.height);
+                // Bottom-Right
+                canvasCtx.moveTo(bbox.originX + bbox.width - cornerLength, bbox.originY + bbox.height);
+                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY + bbox.height);
+                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY + bbox.height - cornerLength);
+                canvasCtx.stroke();
+                
+                // Reset shadow
+                canvasCtx.shadowBlur = 0;
+
+                // --- 2. Draw Translation Card ---
+                canvasCtx.font = "bold 28px system-ui, sans-serif";
+                const textWidth = canvasCtx.measureText(translatedName).width;
+                const padding = 16;
+                const cardHeight = 65;
+                const cardY = bbox.originY - cardHeight - 10;
+                const cardX = bbox.originX;
+
+                // Translucent dark background
+                canvasCtx.fillStyle = "rgba(15, 23, 42, 0.85)"; 
+                canvasCtx.beginPath();
+                canvasCtx.roundRect(cardX, cardY, Math.max(textWidth + padding * 2, 180), cardHeight, 12);
+                canvasCtx.fill();
+                
+                // Subtle green border on the card
+                canvasCtx.lineWidth = 2;
+                canvasCtx.strokeStyle = "rgba(16, 185, 129, 0.6)"; 
+                canvasCtx.stroke();
+
+                // Translated Text (Primary)
+                canvasCtx.fillStyle = "#FFFFFF";
+                canvasCtx.fillText(translatedName, cardX + padding, cardY + 30);
+                
+                // Original English Text & Confidence (Secondary)
+                canvasCtx.font = "16px system-ui, sans-serif";
+                canvasCtx.fillStyle = "#94A3B8"; // Tailwind Slate-400
+                canvasCtx.fillText(`${englishName.toUpperCase()} • ${score}% Match`, cardX + padding, cardY + 52);
+            }
+        }
+    </script>
+</body>
+</html>
