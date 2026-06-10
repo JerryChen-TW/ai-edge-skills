@@ -99,8 +99,8 @@
             "laptop": { es: "La Computadora", fr: "L'Ordinateur", de: "Der Laptop", it: "Il Portatile", hi: "लैपटॉप" },
             "mouse": { es: "El Ratón", fr: "La Souris", de: "Die Maus", it: "Il Mouse", hi: "माउस" },
             "remote": { es: "El Mando", fr: "La Télécommande", de: "Die Fernbedienung", it: "Il Telecomando", hi: "रिमोट" },
-            "keyboard": { es: "El Teclado", fr: "Le Clavier", de: "Die Tastatur", it: "La Tastiera", hi: "कीबोর्ड" },
-            "cell phone": { es: "El Celular", fr: "Le Téléphone", de: "Das Handy", it: "Il Cellulare", hi: "मोबाइル फोन" },
+            "keyboard": { es: "El Teclado", fr: "Le Clavier", de: "Die Tastatur", it: "La Tastiera", hi: "कीबोर्ड" },
+            "cell phone": { es: "El Celular", fr: "Le Téléphone", de: "Das Handy", it: "Il Cellulare", hi: "मोबाइल फोन" },
             "microwave": { es: "El Microondas", fr: "Le Micro-ondes", de: "Die Mikrowelle", it: "Il Microonde", hi: "माइक्रोवेव" },
             "oven": { es: "El Horno", fr: "Le Four", de: "Der Ofen", it: "Il Forno", hi: "ओवन" },
             "toaster": { es: "La Tostadora", fr: "Le Grille-pain", de: "Der Toaster", it: "Il Tostapane", hi: "टोस्टर" },
@@ -168,7 +168,7 @@
                 );
                 objectDetector = await ObjectDetector.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite4/float16/1/efficientdet_lite4.tflite",
+                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite",
                         delegate: "GPU"
                     },
                     scoreThreshold: 0.55,
