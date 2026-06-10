@@ -1,323 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AR Translator v2</title>
-    <style>
-        *{box-sizing:border-box;margin:0;padding:0}
-        body,html{width:100%;height:100%;overflow:hidden;background:#000;font-family:system-ui,-apple-system,sans-serif}
-        #video-container{position:relative;width:100%;height:100%;display:flex;justify-content:center;align-items:center}
-        video{position:absolute;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:1}
-        canvas{position:absolute;top:0;left:0;width:100%;height:100%;z-index:2;pointer-events:none}
-        #ui-layer{position:absolute;top:0;left:0;width:100%;height:100%;z-index:3;pointer-events:none;display:flex;flex-direction:column;justify-content:space-between;padding:24px}
-        .glass{background:rgba(15,23,42,0.6);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.2)}
-        #status-bar{position:absolute;top:24px;left:24px;padding:8px 12px;border-radius:12px;color:#fff;pointer-events:auto;cursor:grab;touch-action:none;user-select:none;z-index:50}
-        #status-bar:active{cursor:grabbing}
-        #status-bar h1{font-size:15px;font-weight:700;display:flex;align-items:center;gap:6px;pointer-events:none}
-        #status-bar p{font-size:12px;color:#6ee7b7;margin-top:2px;pointer-events:none}
-        #start-btn{display:none;position:absolute;bottom:60px;left:50%;transform:translateX(-50%);padding:16px 32px;border-radius:9999px;background:rgba(15,23,42,0.6);border:2px solid rgba(16,185,129,0.5);color:#fff;font-size:18px;font-weight:700;pointer-events:auto;cursor:pointer;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AR Translator v2 – Entry</title>
 </head>
 <body>
-<div id="video-container">
-    <video id="webcam" autoplay playsinline muted></video>
-    <canvas id="output_canvas"></canvas>
-    <div id="ui-layer">
-        <div id="status-bar" class="glass">
-            <h1>
-                <svg width="20" height="20" fill="none" stroke="#34d399" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"/></svg>
-                AR Translator v2
-            </h1>
-            <p id="status-text">Initializing...</p>
-        </div>
-        <button id="start-btn">Tap to Start AR Camera</button>
-    </div>
-</div>
+  <script>
+    // Headless JS entry for AI Edge Gallery.
+    // This file MUST only expose ai_edge_gallery_get_result and return
+    // a JSON string. The actual AR UI runs in assets/webview.html.
 
-<script>
-// ── Language setup ──────────────────────────────────────────────────────────
-// Read from URL param first (webview.html?lang=fr),
-// then fall back to window.__skillData injected by the App,
-// then default to 'es'.
-const urlLang = new URLSearchParams(window.location.search).get('lang');
-const skillLang = (window.__skillData && window.__skillData.target_language) || null;
-const LANG = urlLang || skillLang || 'es';
-const LANG_NAMES = {es:'Spanish',fr:'French',de:'German',it:'Italian',hi:'Hindi'};
+    window['ai_edge_gallery_get_result'] = async (data) => {
+      try {
+        const params = data ? JSON.parse(data) : {};
+        const lang = params.target_language || params.lang || 'es';
 
-// ── Dictionary ───────────────────────────────────────────────────────────────
-const DICT = {
-  "person":{es:"La Persona",fr:"La Personne",de:"Die Person",it:"La Persona",hi:"व्यक्ति"},
-  "bicycle":{es:"La Bicicleta",fr:"Le V\u00e9lo",de:"Das Fahrrad",it:"La Bicicletta",hi:"साइकिल"},
-  "car":{es:"El Coche",fr:"La Voiture",de:"Das Auto",it:"L'Automobile",hi:"कार"},
-  "motorcycle":{es:"La Motocicleta",fr:"La Moto",de:"Das Motorrad",it:"La Motocicletta",hi:"मोटरसाइकिल"},
-  "airplane":{es:"El Avi\u00f3n",fr:"L'Avion",de:"Das Flugzeug",it:"L'Aereo",hi:"हवाई जहाज"},
-  "bus":{es:"El Autob\u00fas",fr:"Le Bus",de:"Der Bus",it:"L'Autobus",hi:"बस"},
-  "train":{es:"El Tren",fr:"Le Train",de:"Der Zug",it:"Il Treno",hi:"ट्रेन"},
-  "truck":{es:"El Cami\u00f3n",fr:"Le Camion",de:"Der LKW",it:"Il Camion",hi:"ट्रक"},
-  "boat":{es:"El Barco",fr:"Le Bateau",de:"Das Boot",it:"La Barca",hi:"नाव"},
-  "traffic light":{es:"El Sem\u00e1foro",fr:"Le Feu",de:"Die Ampel",it:"Il Semaforo",hi:"ट्रैफ़िक लाइट"},
-  "fire hydrant":{es:"La Boca de Incendio",fr:"La Bouche d'Incendie",de:"Der Hydrant",it:"L'Idrante",hi:"अग्निशामक"},
-  "stop sign":{es:"La Se\u00f1al de Stop",fr:"Le Panneau Stop",de:"Das Stoppschild",it:"Il Stop",hi:"स्टॉप साइन"},
-  "bench":{es:"El Banco",fr:"Le Banc",de:"Die Bank",it:"La Panchina",hi:"बेंच"},
-  "bird":{es:"El P\u00e1jaro",fr:"L'Oiseau",de:"Der Vogel",it:"L'Uccello",hi:"पक्षी"},
-  "cat":{es:"El Gato",fr:"Le Chat",de:"Die Katze",it:"Il Gatto",hi:"बिल्ली"},
-  "dog":{es:"El Perro",fr:"Le Chien",de:"Der Hund",it:"Il Cane",hi:"कुत्ता"},
-  "horse":{es:"El Caballo",fr:"Le Cheval",de:"Das Pferd",it:"Il Cavallo",hi:"घोड़ा"},
-  "sheep":{es:"La Oveja",fr:"Le Mouton",de:"Das Schaf",it:"La Pecora",hi:"भेड़"},
-  "cow":{es:"La Vaca",fr:"La Vache",de:"Die Kuh",it:"La Mucca",hi:"गाय"},
-  "elephant":{es:"El Elefante",fr:"L'\u00c9l\u00e9phant",de:"Der Elefant",it:"L'Elefante",hi:"हाथी"},
-  "bear":{es:"El Oso",fr:"L'Ours",de:"Der B\u00e4r",it:"L'Orso",hi:"भालू"},
-  "zebra":{es:"La Cebra",fr:"Le Z\u00e8bre",de:"Das Zebra",it:"La Zebra",hi:"ज़ेबरा"},
-  "giraffe":{es:"La Jirafa",fr:"La Girafe",de:"Die Giraffe",it:"La Giraffa",hi:"जिराफ़"},
-  "backpack":{es:"La Mochila",fr:"Le Sac \u00e0 Dos",de:"Der Rucksack",it:"Lo Zaino",hi:"बैकपैक"},
-  "umbrella":{es:"El Paraguas",fr:"Le Parapluie",de:"Der Regenschirm",it:"L'Ombrello",hi:"छाता"},
-  "handbag":{es:"El Bolso",fr:"Le Sac \u00e0 Main",de:"Die Handtasche",it:"La Borsa",hi:"हैंडबैग"},
-  "tie":{es:"La Corbata",fr:"La Cravate",de:"Die Krawatte",it:"La Cravatta",hi:"टाई"},
-  "suitcase":{es:"La Maleta",fr:"La Valise",de:"Der Koffer",it:"La Valigia",hi:"सूटकेस"},
-  "bottle":{es:"La Botella",fr:"La Bouteille",de:"Die Flasche",it:"La Bottiglia",hi:"बोतल"},
-  "wine glass":{es:"La Copa de Vino",fr:"Le Verre \u00e0 Vin",de:"Das Weinglas",it:"Il Calice",hi:"शराब का गिलास"},
-  "cup":{es:"La Taza",fr:"La Tasse",de:"Die Tasse",it:"La Tazza",hi:"कप"},
-  "fork":{es:"El Tenedor",fr:"La Fourchette",de:"Die Gabel",it:"La Forchetta",hi:"कांटा"},
-  "knife":{es:"El Cuchillo",fr:"Le Couteau",de:"Das Messer",it:"Il Coltello",hi:"चाकू"},
-  "spoon":{es:"La Cuchara",fr:"La Cuill\u00e8re",de:"Der L\u00f6ffel",it:"Il Cucchiaio",hi:"चम्मच"},
-  "bowl":{es:"El Taz\u00f3n",fr:"Le Bol",de:"Die Sch\u00fcssel",it:"La Ciotola",hi:"कटोरा"},
-  "banana":{es:"El Pl\u00e1tano",fr:"La Banane",de:"Die Banane",it:"La Banana",hi:"केला"},
-  "apple":{es:"La Manzana",fr:"La Pomme",de:"Der Apfel",it:"La Mela",hi:"सेब"},
-  "sandwich":{es:"El S\u00e1ndwich",fr:"Le Sandwich",de:"Das Sandwich",it:"Il Panino",hi:"सैंडविच"},
-  "orange":{es:"La Naranja",fr:"L'Orange",de:"Die Orange",it:"L'Arancia",hi:"संतरा"},
-  "broccoli":{es:"El Br\u00f3coli",fr:"Le Brocoli",de:"Der Brokkoli",it:"I Broccoli",hi:"ब्रोकोली"},
-  "carrot":{es:"La Zanahoria",fr:"La Carotte",de:"Die Karotte",it:"La Carota",hi:"गाजर"},
-  "hot dog":{es:"El Perrito Caliente",fr:"Le Hot-Dog",de:"Der Hotdog",it:"L'Hot Dog",hi:"हॉट डॉग"},
-  "pizza":{es:"La Pizza",fr:"La Pizza",de:"Die Pizza",it:"La Pizza",hi:"पिज्जा"},
-  "donut":{es:"El Donut",fr:"Le Beignet",de:"Der Donut",it:"La Ciambella",hi:"डोनट"},
-  "cake":{es:"El Pastel",fr:"Le G\u00e2teau",de:"Der Kuchen",it:"La Torta",hi:"केक"},
-  "chair":{es:"La Silla",fr:"La Chaise",de:"Der Stuhl",it:"La Sedia",hi:"कुर्सी"},
-  "couch":{es:"El Sof\u00e1",fr:"Le Canap\u00e9",de:"Das Sofa",it:"Il Divano",hi:"सोफा"},
-  "potted plant":{es:"La Planta",fr:"La Plante en Pot",de:"Die Topfpflanze",it:"La Pianta in Vaso",hi:"गमले का पौधा"},
-  "bed":{es:"La Cama",fr:"Le Lit",de:"Das Bett",it:"Il Letto",hi:"बिस्तर"},
-  "dining table":{es:"La Mesa",fr:"La Table \u00e0 Manger",de:"Der Esstisch",it:"Il Tavolo",hi:"खाने की मेज"},
-  "toilet":{es:"El Inodoro",fr:"Les Toilettes",de:"Die Toilette",it:"Il WC",hi:"शौचालय"},
-  "tv":{es:"El Televisor",fr:"La T\u00e9l\u00e9vision",de:"Der Fernseher",it:"Il Televisore",hi:"टीवी"},
-  "laptop":{es:"La Computadora",fr:"L'Ordinateur",de:"Der Laptop",it:"Il Portatile",hi:"लैपटॉप"},
-  "mouse":{es:"El Rat\u00f3n",fr:"La Souris",de:"Die Maus",it:"Il Mouse",hi:"माउस"},
-  "remote":{es:"El Mando",fr:"La T\u00e9l\u00e9commande",de:"Die Fernbedienung",it:"Il Telecomando",hi:"रिमोट"},
-  "keyboard":{es:"El Teclado",fr:"Le Clavier",de:"Die Tastatur",it:"La Tastiera",hi:"कीबोर्ड"},
-  "cell phone":{es:"El Celular",fr:"Le T\u00e9l\u00e9phone",de:"Das Handy",it:"Il Cellulare",hi:"मोबाइल फोन"},
-  "microwave":{es:"El Microondas",fr:"Le Micro-ondes",de:"Die Mikrowelle",it:"Il Microonde",hi:"माइक्रोवेव"},
-  "oven":{es:"El Horno",fr:"Le Four",de:"Der Ofen",it:"Il Forno",hi:"ओवन"},
-  "toaster":{es:"La Tostadora",fr:"Le Grille-pain",de:"Der Toaster",it:"Il Tostapane",hi:"टोस्टर"},
-  "sink":{es:"El Fregadero",fr:"L'\u00c9vier",de:"Das Waschbecken",it:"Il Lavandino",hi:"सिंक"},
-  "refrigerator":{es:"El Refrigerador",fr:"Le R\u00e9frig\u00e9rateur",de:"Der K\u00fchlschrank",it:"Il Frigorifero",hi:"फ्रिज"},
-  "book":{es:"El Libro",fr:"Le Livre",de:"Das Buch",it:"Il Libro",hi:"किताब"},
-  "clock":{es:"El Reloj",fr:"L'Horloge",de:"Die Uhr",it:"L'Orologio",hi:"घड़ी"},
-  "vase":{es:"El Jarr\u00f3n",fr:"Le Vase",de:"Die Vase",it:"Il Vaso",hi:"फूलदान"},
-  "scissors":{es:"Las Tijeras",fr:"Les Ciseaux",de:"Die Schere",it:"Le Forbici",hi:"कैंची"},
-  "teddy bear":{es:"El Oso de Peluche",fr:"L'Ours en Peluche",de:"Der Teddyb\u00e4r",it:"L'Orsacchiotto",hi:"टेडी बियर"},
-  "hair drier":{es:"El Secador",fr:"Le S\u00e8che-cheveux",de:"Der Haartrockner",it:"L'Asciugacapelli",hi:"हेयर ड्रायर"},
-  "toothbrush":{es:"El Cepillo",fr:"La Brosse \u00e0 Dents",de:"Die Zahnb\u00fcrste",it:"Lo Spazzolino",hi:"टूथब्रश"}
-};
+        const LANG_NAMES = {
+          es: 'Spanish',
+          fr: 'French',
+          de: 'German',
+          it: 'Italian',
+          hi: 'Hindi',
+        };
 
-const getTr = w => { const d=DICT[w.toLowerCase()]; return d&&d[LANG]?d[LANG]:w.charAt(0).toUpperCase()+w.slice(1); };
+        const humanName = LANG_NAMES[lang] || lang;
 
-// ── ai_edge_gallery_get_result (called by App before rendering) ─────────────
-window['ai_edge_gallery_get_result'] = async (data) => {
-  try {
-    const p = JSON.parse(data);
-    const lang = p.target_language || p.lang || 'es';
-    // Store for use by the AR init below (in case page re-renders)
-    window.__skillData = { target_language: lang };
-    // Trigger language update if already initialised
-    if (window.__setLang) window.__setLang(lang);
-    return JSON.stringify({ result: JSON.stringify({ status: 'ok', language: lang }) });
-  } catch(e) {
-    return JSON.stringify({ error: e.message });
-  }
-};
-
-// ── Draggable status bar ────────────────────────────────────────────────────
-const bar=document.getElementById('status-bar');
-let drag=false,ix=0,iy=0,ox=0,oy=0;
-bar.addEventListener('mousedown',e=>{drag=true;ix=e.clientX-ox;iy=e.clientY-oy;});
-bar.addEventListener('touchstart',e=>{drag=true;ix=e.touches[0].clientX-ox;iy=e.touches[0].clientY-oy;},{passive:false});
-document.addEventListener('mouseup',()=>drag=false);
-document.addEventListener('touchend',()=>drag=false);
-document.addEventListener('mousemove',e=>{if(!drag)return;ox=e.clientX-ix;oy=e.clientY-iy;bar.style.transform=`translate3d(${ox}px,${oy}px,0)`;});
-document.addEventListener('touchmove',e=>{if(!drag)return;e.preventDefault();ox=e.touches[0].clientX-ix;oy=e.touches[0].clientY-iy;bar.style.transform=`translate3d(${ox}px,${oy}px,0)`;},{passive:false});
-</script>
-
-<script type="module">
-import { ObjectDetector, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3";
-
-const video=document.getElementById('webcam');
-const canvas=document.getElementById('output_canvas');
-const ctx=canvas.getContext('2d');
-const statusText=document.getElementById('status-text');
-const startBtn=document.getElementById('start-btn');
-let detector,running=false,lastTime=-1;
-
-// Use the lang resolved at top of file (LANG is a global const)
-let currentLang = window.LANG || new URLSearchParams(location.search).get('lang') || 'es';
-const LANG_NAMES = {es:'Spanish',fr:'French',de:'German',it:'Italian',hi:'Hindi'};
-statusText.textContent = 'Initializing...';
-
-// Allow the App to change language after init
-window.__setLang = (l) => { currentLang = l; };
-
-const MODEL = 'https://jerrychen-tw.github.io/ai-edge-skills/ar-translator-v2/assets/efficientdet_lite2.tflite';
-const WASM  = 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm';
-
-async function init() {
-  statusText.textContent = 'Step 1/3: Loading WASM runtime...';
-  const vision = await FilesetResolver.forVisionTasks(WASM);
-  statusText.textContent = 'Step 2/3: Loading model (GPU)...';
-  try {
-    detector = await ObjectDetector.createFromOptions(vision, { baseOptions:{modelAssetPath:MODEL,delegate:'GPU'}, scoreThreshold:0.5, runningMode:'VIDEO' });
-    statusText.textContent = '\u2713 Ready (GPU)! ' + (LANG_NAMES[currentLang]||currentLang);
-  } catch(e) {
-    console.warn('GPU failed:', e);
-    statusText.textContent = 'Step 3/3: Falling back to CPU...';
-    detector = await ObjectDetector.createFromOptions(vision, { baseOptions:{modelAssetPath:MODEL,delegate:'CPU'}, scoreThreshold:0.5, runningMode:'VIDEO' });
-    statusText.textContent = '\u2713 Ready (CPU)! ' + (LANG_NAMES[currentLang]||currentLang);
-  }
-  startBtn.style.display = 'block';
-}
-
-startBtn.addEventListener('click', () => {
-  if (!detector) return;
-  startBtn.style.display = 'none';
-  statusText.textContent = 'Starting camera...';
-  navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } })
-    .then(stream => {
-      video.srcObject = stream;
-      video.addEventListener('loadeddata', () => { running=true; loop(); });
-    })
-    .catch(err => { statusText.textContent = 'Camera denied: '+err.message; startBtn.style.display='block'; });
-});
-
-async function loop() {
-  if (!running) return;
-  if (video.currentTime !== lastTime) {
-    lastTime = video.currentTime;
-    draw(detector.detectForVideo(video, performance.now()));
-  }
-  requestAnimationFrame(loop);
-}
-
-function draw(result) {
-  const W=window.innerWidth, H=window.innerHeight;
-  if(canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
-  ctx.clearRect(0,0,W,H);
-  if(!video.videoWidth||!video.videoHeight)return;
-  const vr=video.videoWidth/video.videoHeight, dr=W/H;
-  let dw,dh,sx,sy;
-  if(dr>vr){dh=H;dw=H*vr;sx=(W-dw)/2;sy=0;}else{dw=W;dh=W/vr;sx=0;sy=(H-dh)/2;}
-  ctx.drawImage(video,sx,sy,dw,dh);
-  const sc=dw/video.videoWidth;
-  for(const det of result.detections){
-    const rb=det.boundingBox;
-    const b={x:rb.originX*sc+sx, y:rb.originY*sc+sy, w:rb.width*sc, h:rb.height*sc};
-    const cat=det.categories[0];
-    const en=cat.categoryName;
-    const DICT_REF = window.DICT || {};
-    const d = DICT_REF[en.toLowerCase()];
-    const tr = (d && d[currentLang]) ? d[currentLang] : en.charAt(0).toUpperCase()+en.slice(1);
-    const pct=Math.round(cat.score*100);
-    const cl=30;
-    ctx.lineWidth=4;ctx.strokeStyle='#10B981';ctx.shadowColor='#34D399';ctx.shadowBlur=15;
-    ctx.beginPath();
-    ctx.moveTo(b.x,b.y+cl);ctx.lineTo(b.x,b.y);ctx.lineTo(b.x+cl,b.y);
-    ctx.moveTo(b.x+b.w-cl,b.y);ctx.lineTo(b.x+b.w,b.y);ctx.lineTo(b.x+b.w,b.y+cl);
-    ctx.moveTo(b.x,b.y+b.h-cl);ctx.lineTo(b.x,b.y+b.h);ctx.lineTo(b.x+cl,b.y+b.h);
-    ctx.moveTo(b.x+b.w-cl,b.y+b.h);ctx.lineTo(b.x+b.w,b.y+b.h);ctx.lineTo(b.x+b.w,b.y+b.h-cl);
-    ctx.stroke();ctx.shadowBlur=0;
-    const tw=ctx.measureText(tr).width,pad=16,ch=65,cy=b.y-ch-10;
-    ctx.font='bold 28px system-ui,sans-serif';
-    ctx.fillStyle='rgba(15,23,42,0.85)';
-    ctx.beginPath();ctx.roundRect(b.x,cy,Math.max(tw+pad*2,180),ch,12);ctx.fill();
-    ctx.lineWidth=2;ctx.strokeStyle='rgba(16,185,129,0.6)';ctx.stroke();
-    ctx.fillStyle='#FFF';ctx.fillText(tr,b.x+pad,cy+30);
-    ctx.font='16px system-ui,sans-serif';ctx.fillStyle='#94A3B8';
-    ctx.fillText(en.toUpperCase()+' \u2022 '+pct+'%',b.x+pad,cy+52);
-  }
-}
-
-init().catch(e => { statusText.textContent = '\u274c '+e.message; });
-</script>
-
-<script>
-// Expose DICT globally so the module script can access it
-window.DICT = {
-  "person":{es:"La Persona",fr:"La Personne",de:"Die Person",it:"La Persona",hi:"व्यक्ति"},
-  "bicycle":{es:"La Bicicleta",fr:"Le V\u00e9lo",de:"Das Fahrrad",it:"La Bicicletta",hi:"साइकिल"},
-  "car":{es:"El Coche",fr:"La Voiture",de:"Das Auto",it:"L'Automobile",hi:"कार"},
-  "motorcycle":{es:"La Motocicleta",fr:"La Moto",de:"Das Motorrad",it:"La Motocicletta",hi:"मोटरसाइकिल"},
-  "airplane":{es:"El Avi\u00f3n",fr:"L'Avion",de:"Das Flugzeug",it:"L'Aereo",hi:"हवाई जहाज"},
-  "bus":{es:"El Autob\u00fas",fr:"Le Bus",de:"Der Bus",it:"L'Autobus",hi:"बस"},
-  "train":{es:"El Tren",fr:"Le Train",de:"Der Zug",it:"Il Treno",hi:"ट्रेन"},
-  "truck":{es:"El Cami\u00f3n",fr:"Le Camion",de:"Der LKW",it:"Il Camion",hi:"ट्रक"},
-  "boat":{es:"El Barco",fr:"Le Bateau",de:"Das Boot",it:"La Barca",hi:"नाव"},
-  "traffic light":{es:"El Sem\u00e1foro",fr:"Le Feu",de:"Die Ampel",it:"Il Semaforo",hi:"ट्रैफ़िक लाइट"},
-  "fire hydrant":{es:"La Boca de Incendio",fr:"La Bouche d'Incendie",de:"Der Hydrant",it:"L'Idrante",hi:"अग्निशामक"},
-  "stop sign":{es:"La Se\u00f1al de Stop",fr:"Le Panneau Stop",de:"Das Stoppschild",it:"Il Stop",hi:"स्टॉप साइन"},
-  "bench":{es:"El Banco",fr:"Le Banc",de:"Die Bank",it:"La Panchina",hi:"बेंच"},
-  "bird":{es:"El P\u00e1jaro",fr:"L'Oiseau",de:"Der Vogel",it:"L'Uccello",hi:"पक्षी"},
-  "cat":{es:"El Gato",fr:"Le Chat",de:"Die Katze",it:"Il Gatto",hi:"बिल्ली"},
-  "dog":{es:"El Perro",fr:"Le Chien",de:"Der Hund",it:"Il Cane",hi:"कुत्ता"},
-  "horse":{es:"El Caballo",fr:"Le Cheval",de:"Das Pferd",it:"Il Cavallo",hi:"घोड़ा"},
-  "sheep":{es:"La Oveja",fr:"Le Mouton",de:"Das Schaf",it:"La Pecora",hi:"भेड़"},
-  "cow":{es:"La Vaca",fr:"La Vache",de:"Die Kuh",it:"La Mucca",hi:"गाय"},
-  "elephant":{es:"El Elefante",fr:"L'\u00c9l\u00e9phant",de:"Der Elefant",it:"L'Elefante",hi:"हाथी"},
-  "bear":{es:"El Oso",fr:"L'Ours",de:"Der B\u00e4r",it:"L'Orso",hi:"भालू"},
-  "zebra":{es:"La Cebra",fr:"Le Z\u00e8bre",de:"Das Zebra",it:"La Zebra",hi:"ज़ेबरा"},
-  "giraffe":{es:"La Jirafa",fr:"La Girafe",de:"Die Giraffe",it:"La Giraffa",hi:"जिराफ़"},
-  "backpack":{es:"La Mochila",fr:"Le Sac \u00e0 Dos",de:"Der Rucksack",it:"Lo Zaino",hi:"बैकपैक"},
-  "umbrella":{es:"El Paraguas",fr:"Le Parapluie",de:"Der Regenschirm",it:"L'Ombrello",hi:"छाता"},
-  "handbag":{es:"El Bolso",fr:"Le Sac \u00e0 Main",de:"Die Handtasche",it:"La Borsa",hi:"हैंडबैग"},
-  "tie":{es:"La Corbata",fr:"La Cravate",de:"Die Krawatte",it:"La Cravatta",hi:"टाई"},
-  "suitcase":{es:"La Maleta",fr:"La Valise",de:"Der Koffer",it:"La Valigia",hi:"सूटकेस"},
-  "bottle":{es:"La Botella",fr:"La Bouteille",de:"Die Flasche",it:"La Bottiglia",hi:"बोतल"},
-  "wine glass":{es:"La Copa de Vino",fr:"Le Verre \u00e0 Vin",de:"Das Weinglas",it:"Il Calice",hi:"शराब का गिलास"},
-  "cup":{es:"La Taza",fr:"La Tasse",de:"Die Tasse",it:"La Tazza",hi:"कप"},
-  "fork":{es:"El Tenedor",fr:"La Fourchette",de:"Die Gabel",it:"La Forchetta",hi:"कांटा"},
-  "knife":{es:"El Cuchillo",fr:"Le Couteau",de:"Das Messer",it:"Il Coltello",hi:"चाकू"},
-  "spoon":{es:"La Cuchara",fr:"La Cuill\u00e8re",de:"Der L\u00f6ffel",it:"Il Cucchiaio",hi:"चम्मच"},
-  "bowl":{es:"El Taz\u00f3n",fr:"Le Bol",de:"Die Sch\u00fcssel",it:"La Ciotola",hi:"कटोरा"},
-  "banana":{es:"El Pl\u00e1tano",fr:"La Banane",de:"Die Banane",it:"La Banana",hi:"केला"},
-  "apple":{es:"La Manzana",fr:"La Pomme",de:"Der Apfel",it:"La Mela",hi:"सेब"},
-  "sandwich":{es:"El S\u00e1ndwich",fr:"Le Sandwich",de:"Das Sandwich",it:"Il Panino",hi:"सैंडविच"},
-  "orange":{es:"La Naranja",fr:"L'Orange",de:"Die Orange",it:"L'Arancia",hi:"संतरा"},
-  "broccoli":{es:"El Br\u00f3coli",fr:"Le Brocoli",de:"Der Brokkoli",it:"I Broccoli",hi:"ब्रोकोली"},
-  "carrot":{es:"La Zanahoria",fr:"La Carotte",de:"Die Karotte",it:"La Carota",hi:"गाजर"},
-  "hot dog":{es:"El Perrito Caliente",fr:"Le Hot-Dog",de:"Der Hotdog",it:"L'Hot Dog",hi:"हॉट डॉग"},
-  "pizza":{es:"La Pizza",fr:"La Pizza",de:"Die Pizza",it:"La Pizza",hi:"पिज्जा"},
-  "donut":{es:"El Donut",fr:"Le Beignet",de:"Der Donut",it:"La Ciambella",hi:"ࠡोनट"},
-  "cake":{es:"El Pastel",fr:"Le G\u00e2teau",de:"Der Kuchen",it:"La Torta",hi:"केक"},
-  "chair":{es:"La Silla",fr:"La Chaise",de:"Der Stuhl",it:"La Sedia",hi:"कुर्सी"},
-  "couch":{es:"El Sof\u00e1",fr:"Le Canap\u00e9",de:"Das Sofa",it:"Il Divano",hi:"सोफा"},
-  "potted plant":{es:"La Planta",fr:"La Plante en Pot",de:"Die Topfpflanze",it:"La Pianta in Vaso",hi:"गमले का पौधा"},
-  "bed":{es:"La Cama",fr:"Le Lit",de:"Das Bett",it:"Il Letto",hi:"बिस्तर"},
-  "dining table":{es:"La Mesa",fr:"La Table \u00e0 Manger",de:"Der Esstisch",it:"Il Tavolo",hi:"खाने की मेज"},
-  "toilet":{es:"El Inodoro",fr:"Les Toilettes",de:"Die Toilette",it:"Il WC",hi:"शौचालय"},
-  "tv":{es:"El Televisor",fr:"La T\u00e9l\u00e9vision",de:"Der Fernseher",it:"Il Televisore",hi:"टीवी"},
-  "laptop":{es:"La Computadora",fr:"L'Ordinateur",de:"Der Laptop",it:"Il Portatile",hi:"लैपटॉप"},
-  "mouse":{es:"El Rat\u00f3n",fr:"La Souris",de:"Die Maus",it:"Il Mouse",hi:"माउस"},
-  "remote":{es:"El Mando",fr:"La T\u00e9l\u00e9commande",de:"Die Fernbedienung",it:"Il Telecomando",hi:"रिमोट"},
-  "keyboard":{es:"El Teclado",fr:"Le Clavier",de:"Die Tastatur",it:"La Tastiera",hi:"कीबोर्ड"},
-  "cell phone":{es:"El Celular",fr:"Le T\u00e9l\u00e9phone",de:"Das Handy",it:"Il Cellulare",hi:"मोबाइल फोन"},
-  "microwave":{es:"El Microondas",fr:"Le Micro-ondes",de:"Die Mikrowelle",it:"Il Microonde",hi:"माइक्रोवेव"},
-  "oven":{es:"El Horno",fr:"Le Four",de:"Der Ofen",it:"Il Forno",hi:"ओवन"},
-  "toaster":{es:"La Tostadora",fr:"Le Grille-pain",de:"Der Toaster",it:"Il Tostapane",hi:"टोस्टर"},
-  "sink":{es:"El Fregadero",fr:"L'\u00c9vier",de:"Das Waschbecken",it:"Il Lavandino",hi:"सिंक"},
-  "refrigerator":{es:"El Refrigerador",fr:"Le R\u00e9frig\u00e9rateur",de:"Der K\u00fchlschrank",it:"Il Frigorifero",hi:"फ्रिज"},
-  "book":{es:"El Libro",fr:"Le Livre",de:"Das Buch",it:"Il Libro",hi:"किताब"},
-  "clock":{es:"El Reloj",fr:"L'Horloge",de:"Die Uhr",it:"L'Orologio",hi:"घड़ी"},
-  "vase":{es:"El Jarr\u00f3n",fr:"Le Vase",de:"Die Vase",it:"Il Vaso",hi:"फूलदान"},
-  "scissors":{es:"Las Tijeras",fr:"Les Ciseaux",de:"Die Schere",it:"Le Forbici",hi:"कैंची"},
-  "teddy bear":{es:"El Oso de Peluche",fr:"L'Ours en Peluche",de:"Der Teddyb\u00e4r",it:"L'Orsacchiotto",hi:"टेडी बियर"},
-  "hair drier":{es:"El Secador",fr:"Le S\u00e8che-cheveux",de:"Der Haartrockner",it:"L'Asciugacapelli",hi:"हेयर ड्रायर"},
-  "toothbrush":{es:"El Cepillo",fr:"La Brosse \u00e0 Dents",de:"Die Zahnb\u00fcrste",it:"Lo Spazzolino",hi:"टूथब्रश"}
-};
-</script>
+        return JSON.stringify({
+          result: `Opening AR Translator with target language set to ${humanName}. Tell the user to tap the preview card to start the AR camera.`,
+          webview: {
+            // Relative to the skill assets/ folder as documented in the
+            // official skills README.
+            url: `webview.html?lang=${encodeURIComponent(lang)}`,
+            aspectRatio: 1.777 // 16:9 fullscreen-style card
+          }
+        });
+      } catch (e) {
+        console.error(e);
+        return JSON.stringify({
+          error: `Failed to start AR Translator: ${e.message}`
+        });
+      }
+    };
+  </script>
 </body>
 </html>
