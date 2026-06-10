@@ -136,9 +136,10 @@
         document.addEventListener("mousemove",drag);
         document.addEventListener("touchmove",drag,{passive:false});
 
-        // Use CDN wasm path - more reliable than local relative path in webviews
-        const WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
-        const MODEL_PATH = "./efficientdet_lite2.tflite";
+        // ✅ 修正：用 GitHub Pages 絕對 URL，避免 App webview 沙盒相對路徑解析失敗
+        const BASE = "https://jerrychen-tw.github.io/ai-edge-skills/ar-translator-v2/assets";
+        const WASM_PATH = BASE + "/wasm";
+        const MODEL_PATH = BASE + "/efficientdet_lite2.tflite";
 
         async function tryCreateDetector(vision, delegate) {
             return ObjectDetector.createFromOptions(vision, {
