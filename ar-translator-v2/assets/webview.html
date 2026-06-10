@@ -18,16 +18,14 @@
     <div id="video-container">
         <video id="webcam" autoplay playsinline muted></video>
         <canvas id="output_canvas"></canvas>
-        
         <div id="ui-layer">
             <div id="status-bar" class="glass-panel px-3 py-2 rounded-xl text-white shadow-md pointer-events-auto absolute top-6 left-6 cursor-grab active:cursor-grabbing touch-none select-none z-50">
                 <h1 class="text-base font-bold flex items-center gap-1.5 pointer-events-none">
                     <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path></svg>
-                    AR Translator v2 (Offline)
+                    AR Translator v2
                 </h1>
-                <p class="text-xs text-emerald-200 mt-0.5 pointer-events-none" id="status-text">Loading AI Model...</p>
+                <p class="text-xs text-emerald-200 mt-0.5 pointer-events-none" id="status-text">Initializing...</p>
             </div>
-            
             <button id="start-btn" class="glass-panel px-8 py-4 rounded-full text-white font-bold text-lg pointer-events-auto self-center mb-10 hover:bg-white/20 transition-all shadow-2xl hidden transform active:scale-95 border-emerald-500/50 border-2 mt-auto">
                 Tap to Start AR Camera
             </button>
@@ -42,166 +40,133 @@
         const canvasCtx = canvasElement.getContext("2d");
         const statusText = document.getElementById("status-text");
         const startBtn = document.getElementById("start-btn");
-
-        let objectDetector;
-        let webcamRunning = false;
-        let lastVideoTime = -1;
+        let objectDetector, webcamRunning = false, lastVideoTime = -1;
 
         const urlParams = new URLSearchParams(window.location.search);
         const targetLang = urlParams.get('lang') || 'es';
-
-        const langNames = { 'es': 'Spanish', 'fr': 'French', 'de': 'German', 'it': 'Italian', 'hi': 'Hindi' };
+        const langNames = { es:'Spanish', fr:'French', de:'German', it:'Italian', hi:'Hindi' };
 
         const dictionary = {
-            "person": { es: "La Persona", fr: "La Personne", de: "Die Person", it: "La Persona", hi: "व्यक्ति" },
-            "bicycle": { es: "La Bicicleta", fr: "Le Vélo", de: "Das Fahrrad", it: "La Bicicletta", hi: "साइकिल" },
-            "car": { es: "El Coche", fr: "La Voiture", de: "Das Auto", it: "L'Automobile", hi: "कार" },
-            "motorcycle": { es: "La Motocicleta", fr: "La Moto", de: "Das Motorrad", it: "La Motocicletta", hi: "मोटरसाइकिल" },
-            "airplane": { es: "El Avión", fr: "L'Avion", de: "Das Flugzeug", it: "L'Aereo", hi: "हवाई जहाज" },
-            "bus": { es: "El Autobús", fr: "Le Bus", de: "Der Bus", it: "L'Autobus", hi: "बस" },
-            "train": { es: "El Tren", fr: "Le Train", de: "Der Zug", it: "Il Treno", hi: "ट्रेन" },
-            "truck": { es: "El Camión", fr: "Le Camion", de: "Der LKW", it: "Il Camion", hi: "ट्रक" },
-            "boat": { es: "El Barco", fr: "Le Bateau", de: "Das Boot", it: "La Barca", hi: "नाव" },
-            "traffic light": { es: "El Semáforo", fr: "Le Feu de Circulation", de: "Die Ampel", it: "Il Semaforo", hi: "ट्रैफ़िक लाइट" },
-            "fire hydrant": { es: "La Boca de Incendio", fr: "La Bouche d'Incendie", de: "Der Hydrant", it: "L'Idrante", hi: "अग्निशामक" },
-            "stop sign": { es: "La Señal de Stop", fr: "Le Panneau Stop", de: "Das Stoppschild", it: "Il Segnale di Stop", hi: "स्टॉप साइन" },
-            "parking meter": { es: "El Parquímetro", fr: "Le Parcmètre", de: "Die Parkuhr", it: "Il Parchimetro", hi: "पार्किंग मीटर" },
-            "bench": { es: "El Banco", fr: "Le Banc", de: "Die Bank", it: "La Panchina", hi: "बेंच" },
-            "bird": { es: "El Pájaro", fr: "L'Oiseau", de: "Der Vogel", it: "L'Uccello", hi: "पक्षी" },
-            "cat": { es: "El Gato", fr: "Le Chat", de: "Die Katze", it: "Il Gatto", hi: "बिल्ली" },
-            "dog": { es: "El Perro", fr: "Le Chien", de: "Der Hund", it: "Il Cane", hi: "कुत्ता" },
-            "horse": { es: "El Caballo", fr: "Le Cheval", de: "Das Pferd", it: "Il Cavallo", hi: "घोड़ा" },
-            "sheep": { es: "La Oveja", fr: "Le Mouton", de: "Das Schaf", it: "La Pecora", hi: "भेड़" },
-            "cow": { es: "La Vaca", fr: "La Vache", de: "Die Kuh", it: "La Mucca", hi: "गाय" },
-            "elephant": { es: "El Elefante", fr: "L'Éléphant", de: "Der Elefant", it: "L'Elefante", hi: "हाथी" },
-            "bear": { es: "El Oso", fr: "L'Ours", de: "Der Bär", it: "L'Orso", hi: "भालू" },
-            "zebra": { es: "La Cebra", fr: "Le Zèbre", de: "Das Zebra", it: "La Zebra", hi: "ज़ेबरा" },
-            "giraffe": { es: "La Jirafa", fr: "La Girafe", de: "Die Giraffe", it: "La Giraffa", hi: "जिराफ़" },
-            "backpack": { es: "La Mochila", fr: "Le Sac à Dos", de: "Der Rucksack", it: "Lo Zaino", hi: "बैकपैक" },
-            "umbrella": { es: "El Paraguas", fr: "Le Parapluie", de: "Der Regenschirm", it: "L'Ombrello", hi: "छाता" },
-            "handbag": { es: "El Bolso", fr: "Le Sac à Main", de: "Die Handtasche", it: "La Borsa", hi: "हैंडबैग" },
-            "tie": { es: "La Corbata", fr: "La Cravate", de: "Die Krawatte", it: "La Cravatta", hi: "टाई" },
-            "suitcase": { es: "La Maleta", fr: "La Valise", de: "Der Koffer", it: "La Valigia", hi: "सूटकेस" },
-            "frisbee": { es: "El Frisbee", fr: "Le Frisbee", de: "Die Frisbee", it: "Il Frisbee", hi: "फ्रिस्बी" },
-            "skis": { es: "Los Esquís", fr: "Les Skis", de: "Die Skier", it: "Gli Sci", hi: "स्की" },
-            "snowboard": { es: "El Snowboard", fr: "Le Snowboard", de: "Das Snowboard", it: "Lo Snowboard", hi: "स्नोबोर्ड" },
-            "sports ball": { es: "La Pelota", fr: "Le Ballon", de: "Der Ball", it: "La Palla", hi: "खेल की गेंद" },
-            "kite": { es: "La Cometa", fr: "Le Cerf-volant", de: "Der Drachen", it: "L'Aquilone", hi: "पतंग" },
-            "baseball bat": { es: "El Bate", fr: "La Batte", de: "Der Baseballschläger", it: "La Mazza", hi: "बेसबॉल बैट" },
-            "baseball glove": { es: "El Guante", fr: "Le Gant", de: "Der Handschuh", it: "Il Guanto", hi: "बेसबॉल दस्ताना" },
-            "skateboard": { es: "El Monopatín", fr: "Le Skateboard", de: "Das Skateboard", it: "Lo Skateboard", hi: "स्केटबोर्ड" },
-            "surfboard": { es: "La Tabla de Surf", fr: "La Planche de Surf", de: "Das Surfbrett", it: "La Tavola da Surf", hi: "सर्फ़बोर्ड" },
-            "tennis racket": { es: "La Raqueta", fr: "La Raquette", de: "Der Tennisschläger", it: "La Racchetta", hi: "टेनिस रैकेट" },
-            "bottle": { es: "La Botella", fr: "La Bouteille", de: "Die Flasche", it: "La Bottiglia", hi: "बोतल" },
-            "wine glass": { es: "La Copa de Vino", fr: "Le Verre à Vin", de: "Das Weinglas", it: "Il Calice", hi: "शराब का गिलास" },
-            "cup": { es: "La Taza", fr: "La Tasse", de: "Die Tasse", it: "La Tazza", hi: "कप" },
-            "fork": { es: "El Tenedor", fr: "La Fourchette", de: "Die Gabel", it: "La Forchetta", hi: "कांटा" },
-            "knife": { es: "El Cuchillo", fr: "Le Couteau", de: "Das Messer", it: "Il Coltello", hi: "चाकू" },
-            "spoon": { es: "La Cuchara", fr: "La Cuillère", de: "Der Löffel", it: "Il Cucchiaio", hi: "चम्मच" },
-            "bowl": { es: "El Tazón", fr: "Le Bol", de: "Die Schüssel", it: "La Ciotola", hi: "कटोरा" },
-            "banana": { es: "El Plátano", fr: "La Banane", de: "Die Banane", it: "La Banana", hi: "केला" },
-            "apple": { es: "La Manzana", fr: "La Pomme", de: "Der Apfel", it: "La Mela", hi: "सेब" },
-            "sandwich": { es: "El Sándwich", fr: "Le Sandwich", de: "Das Sandwich", it: "Il Panino", hi: "सैंडविच" },
-            "orange": { es: "La Naranja", fr: "L'Orange", de: "Die Orange", it: "L'Arancia", hi: "संतरा" },
-            "broccoli": { es: "El Brócoli", fr: "Le Brocoli", de: "Der Brokkoli", it: "I Broccoli", hi: "ब्रोकोली" },
-            "carrot": { es: "La Zanahoria", fr: "La Carotte", de: "Die Karotte", it: "La Carota", hi: "गाजर" },
-            "hot dog": { es: "El Perrito Caliente", fr: "Le Hot-Dog", de: "Der Hotdog", it: "L'Hot Dog", hi: "हॉट डॉग" },
-            "pizza": { es: "La Pizza", fr: "La Pizza", de: "Die Pizza", it: "La Pizza", hi: "पिज्जा" },
-            "donut": { es: "El Donut", fr: "Le Beignet", de: "Der Donut", it: "La Ciambella", hi: "डोनट" },
-            "cake": { es: "El Pastel", fr: "Le Gâteau", de: "Der Kuchen", it: "La Torta", hi: "केक" },
-            "chair": { es: "La Silla", fr: "La Chaise", de: "Der Stuhl", it: "La Sedia", hi: "कुर्सी" },
-            "couch": { es: "El Sofá", fr: "Le Canapé", de: "Das Sofa", it: "Il Divano", hi: "सोफा" },
-            "potted plant": { es: "La Planta", fr: "La Plante en Pot", de: "Die Topfpflanze", it: "La Pianta in Vaso", hi: "गमले का पौधा" },
-            "bed": { es: "La Cama", fr: "Le Lit", de: "Das Bett", it: "Il Letto", hi: "बिस्तर" },
-            "dining table": { es: "La Mesa", fr: "La Table à Manger", de: "Der Esstisch", it: "Il Tavolo", hi: "खाने की मेज" },
-            "toilet": { es: "El Inodoro", fr: "Les Toilettes", de: "Die Toilette", it: "Il WC", hi: "शौचालय" },
-            "tv": { es: "El Televisor", fr: "La Télévision", de: "Der Fernseher", it: "Il Televisore", hi: "टीवी" },
-            "laptop": { es: "La Computadora", fr: "L'Ordinateur", de: "Der Laptop", it: "Il Portatile", hi: "लैपटॉप" },
-            "mouse": { es: "El Ratón", fr: "La Souris", de: "Die Maus", it: "Il Mouse", hi: "माउस" },
-            "remote": { es: "El Mando", fr: "La Télécommande", de: "Die Fernbedienung", it: "Il Telecomando", hi: "रिमोट" },
-            "keyboard": { es: "El Teclado", fr: "Le Clavier", de: "Die Tastatur", it: "La Tastiera", hi: "कीबोर्ड" },
-            "cell phone": { es: "El Celular", fr: "Le Téléphone", de: "Das Handy", it: "Il Cellulare", hi: "मोबाइल फोन" },
-            "microwave": { es: "El Microondas", fr: "Le Micro-ondes", de: "Die Mikrowelle", it: "Il Microonde", hi: "माइक्रोवेव" },
-            "oven": { es: "El Horno", fr: "Le Four", de: "Der Ofen", it: "Il Forno", hi: "ओवन" },
-            "toaster": { es: "La Tostadora", fr: "Le Grille-pain", de: "Der Toaster", it: "Il Tostapane", hi: "टोस्टर" },
-            "sink": { es: "El Fregadero", fr: "L'Évier", de: "Das Waschbecken", it: "Il Lavandino", hi: "सिंक" },
-            "refrigerator": { es: "El Refrigerador", fr: "Le Réfrigérateur", de: "Der Kühlschrank", it: "Il Frigorifero", hi: "फ्रिज" },
-            "book": { es: "El Libro", fr: "Le Livre", de: "Das Buch", it: "Il Libro", hi: "किताब" },
-            "clock": { es: "El Reloj", fr: "L'Horloge", de: "Die Uhr", it: "L'Orologio", hi: "घड़ी" },
-            "vase": { es: "El Jarrón", fr: "Le Vase", de: "Die Vase", it: "Il Vaso", hi: "फूलदान" },
-            "scissors": { es: "Las Tijeras", fr: "Les Ciseaux", de: "Die Schere", it: "Le Forbici", hi: "कैंची" },
-            "teddy bear": { es: "El Oso de Peluche", fr: "L'Ours en Peluche", de: "Der Teddybär", it: "L'Orsacchiotto", hi: "टेडी बियर" },
-            "hair drier": { es: "El Secador de Pelo", fr: "Le Sèche-cheveux", de: "Der Haartrockner", it: "L'Asciugacapelli", hi: "हेयर ड्रायर" },
-            "toothbrush": { es: "El Cepillo de Dientes", fr: "La Brosse à Dents", de: "Die Zahnbürste", it: "Lo Spazzolino", hi: "टूथब्रश" }
+            "person":{es:"La Persona",fr:"La Personne",de:"Die Person",it:"La Persona",hi:"\u0935\u094d\u092f\u0915\u094d\u0924\u093f"},
+            "bicycle":{es:"La Bicicleta",fr:"Le V\u00e9lo",de:"Das Fahrrad",it:"La Bicicletta",hi:"\u0938\u093e\u0907\u0915\u093f\u0932"},
+            "car":{es:"El Coche",fr:"La Voiture",de:"Das Auto",it:"L'Automobile",hi:"\u0915\u093e\u0930"},
+            "motorcycle":{es:"La Motocicleta",fr:"La Moto",de:"Das Motorrad",it:"La Motocicletta",hi:"\u092e\u094b\u091f\u0930\u0938\u093e\u0907\u0915\u093f\u0932"},
+            "airplane":{es:"El Avi\u00f3n",fr:"L'Avion",de:"Das Flugzeug",it:"L'Aereo",hi:"\u0939\u0935\u093e\u0908 \u091c\u0939\u093e\u091c"},
+            "bus":{es:"El Autob\u00fas",fr:"Le Bus",de:"Der Bus",it:"L'Autobus",hi:"\u092c\u0938"},
+            "train":{es:"El Tren",fr:"Le Train",de:"Der Zug",it:"Il Treno",hi:"\u091f\u094d\u0930\u0947\u0928"},
+            "truck":{es:"El Cami\u00f3n",fr:"Le Camion",de:"Der LKW",it:"Il Camion",hi:"\u091f\u094d\u0930\u0915"},
+            "boat":{es:"El Barco",fr:"Le Bateau",de:"Das Boot",it:"La Barca",hi:"\u0928\u093e\u0935"},
+            "traffic light":{es:"El Sem\u00e1foro",fr:"Le Feu",de:"Die Ampel",it:"Il Semaforo",hi:"\u091f\u094d\u0930\u0948\u092b\u093c\u093f\u0915 \u0932\u093e\u0907\u091f"},
+            "fire hydrant":{es:"La Boca de Incendio",fr:"La Bouche d'Incendie",de:"Der Hydrant",it:"L'Idrante",hi:"\u0905\u0917\u094d\u0928\u093f\u0936\u093e\u092e\u0915"},
+            "stop sign":{es:"La Se\u00f1al de Stop",fr:"Le Panneau Stop",de:"Das Stoppschild",it:"Il Stop",hi:"\u0938\u094d\u091f\u0949\u092a \u0938\u093e\u0907\u0928"},
+            "bench":{es:"El Banco",fr:"Le Banc",de:"Die Bank",it:"La Panchina",hi:"\u092c\u0947\u0902\u091a"},
+            "bird":{es:"El P\u00e1jaro",fr:"L'Oiseau",de:"Der Vogel",it:"L'Uccello",hi:"\u092a\u0915\u094d\u0937\u0940"},
+            "cat":{es:"El Gato",fr:"Le Chat",de:"Die Katze",it:"Il Gatto",hi:"\u092c\u093f\u0932\u094d\u0932\u0940"},
+            "dog":{es:"El Perro",fr:"Le Chien",de:"Der Hund",it:"Il Cane",hi:"\u0915\u0941\u0924\u094d\u0924\u093e"},
+            "horse":{es:"El Caballo",fr:"Le Cheval",de:"Das Pferd",it:"Il Cavallo",hi:"\u0918\u094b\u0921\u093c\u093e"},
+            "sheep":{es:"La Oveja",fr:"Le Mouton",de:"Das Schaf",it:"La Pecora",hi:"\u092d\u0947\u0921\u093c"},
+            "cow":{es:"La Vaca",fr:"La Vache",de:"Die Kuh",it:"La Mucca",hi:"\u0917\u093e\u092f"},
+            "elephant":{es:"El Elefante",fr:"L'\u00c9l\u00e9phant",de:"Der Elefant",it:"L'Elefante",hi:"\u0939\u093e\u0925\u0940"},
+            "bear":{es:"El Oso",fr:"L'Ours",de:"Der B\u00e4r",it:"L'Orso",hi:"\u092d\u093e\u0932\u0942"},
+            "zebra":{es:"La Cebra",fr:"Le Z\u00e8bre",de:"Das Zebra",it:"La Zebra",hi:"\u091c\u093c\u0947\u092c\u0930\u093e"},
+            "giraffe":{es:"La Jirafa",fr:"La Girafe",de:"Die Giraffe",it:"La Giraffa",hi:"\u091c\u093f\u0930\u093e\u092b\u093c"},
+            "backpack":{es:"La Mochila",fr:"Le Sac \u00e0 Dos",de:"Der Rucksack",it:"Lo Zaino",hi:"\u092c\u0948\u0915\u092a\u0948\u0915"},
+            "umbrella":{es:"El Paraguas",fr:"Le Parapluie",de:"Der Regenschirm",it:"L'Ombrello",hi:"\u091b\u093e\u0924\u093e"},
+            "handbag":{es:"El Bolso",fr:"Le Sac \u00e0 Main",de:"Die Handtasche",it:"La Borsa",hi:"\u0939\u0948\u0902\u0921\u092c\u0948\u0917"},
+            "tie":{es:"La Corbata",fr:"La Cravate",de:"Die Krawatte",it:"La Cravatta",hi:"\u091f\u093e\u0908"},
+            "suitcase":{es:"La Maleta",fr:"La Valise",de:"Der Koffer",it:"La Valigia",hi:"\u0938\u0942\u091f\u0915\u0947\u0938"},
+            "bottle":{es:"La Botella",fr:"La Bouteille",de:"Die Flasche",it:"La Bottiglia",hi:"\u092c\u094b\u0924\u0932"},
+            "wine glass":{es:"La Copa de Vino",fr:"Le Verre \u00e0 Vin",de:"Das Weinglas",it:"Il Calice",hi:"\u0936\u0930\u093e\u092c \u0915\u093e \u0917\u093f\u0932\u093e\u0938"},
+            "cup":{es:"La Taza",fr:"La Tasse",de:"Die Tasse",it:"La Tazza",hi:"\u0915\u092a"},
+            "fork":{es:"El Tenedor",fr:"La Fourchette",de:"Die Gabel",it:"La Forchetta",hi:"\u0915\u093e\u0902\u091f\u093e"},
+            "knife":{es:"El Cuchillo",fr:"Le Couteau",de:"Das Messer",it:"Il Coltello",hi:"\u091a\u093e\u0915\u0942"},
+            "spoon":{es:"La Cuchara",fr:"La Cuill\u00e8re",de:"Der L\u00f6ffel",it:"Il Cucchiaio",hi:"\u091a\u092e\u094d\u092e\u091a"},
+            "bowl":{es:"El Taz\u00f3n",fr:"Le Bol",de:"Die Sch\u00fcssel",it:"La Ciotola",hi:"\u0915\u091f\u094b\u0930\u093e"},
+            "banana":{es:"El Pl\u00e1tano",fr:"La Banane",de:"Die Banane",it:"La Banana",hi:"\u0915\u0947\u0932\u093e"},
+            "apple":{es:"La Manzana",fr:"La Pomme",de:"Der Apfel",it:"La Mela",hi:"\u0938\u0947\u092c"},
+            "sandwich":{es:"El S\u00e1ndwich",fr:"Le Sandwich",de:"Das Sandwich",it:"Il Panino",hi:"\u0938\u0948\u0902\u0921\u0935\u093f\u091a"},
+            "orange":{es:"La Naranja",fr:"L'Orange",de:"Die Orange",it:"L'Arancia",hi:"\u0938\u0902\u0924\u0930\u093e"},
+            "broccoli":{es:"El Br\u00f3coli",fr:"Le Brocoli",de:"Der Brokkoli",it:"I Broccoli",hi:"\u092c\u094d\u0930\u094b\u0915\u094b\u0932\u0940"},
+            "carrot":{es:"La Zanahoria",fr:"La Carotte",de:"Die Karotte",it:"La Carota",hi:"\u0917\u093e\u091c\u0930"},
+            "hot dog":{es:"El Perrito Caliente",fr:"Le Hot-Dog",de:"Der Hotdog",it:"L'Hot Dog",hi:"\u0939\u0949\u091f \u0921\u0949\u0917"},
+            "pizza":{es:"La Pizza",fr:"La Pizza",de:"Die Pizza",it:"La Pizza",hi:"\u092a\u093f\u091c\u094d\u091c\u093e"},
+            "donut":{es:"El Donut",fr:"Le Beignet",de:"Der Donut",it:"La Ciambella",hi:"\u0921\u094b\u0928\u091f"},
+            "cake":{es:"El Pastel",fr:"Le G\u00e2teau",de:"Der Kuchen",it:"La Torta",hi:"\u0915\u0947\u0915"},
+            "chair":{es:"La Silla",fr:"La Chaise",de:"Der Stuhl",it:"La Sedia",hi:"\u0915\u0941\u0930\u094d\u0938\u0940"},
+            "couch":{es:"El Sof\u00e1",fr:"Le Canap\u00e9",de:"Das Sofa",it:"Il Divano",hi:"\u0938\u094b\u092b\u093e"},
+            "potted plant":{es:"La Planta",fr:"La Plante en Pot",de:"Die Topfpflanze",it:"La Pianta in Vaso",hi:"\u0917\u092e\u0932\u0947 \u0915\u093e \u092a\u094c\u0927\u093e"},
+            "bed":{es:"La Cama",fr:"Le Lit",de:"Das Bett",it:"Il Letto",hi:"\u092c\u093f\u0938\u094d\u0924\u0930"},
+            "dining table":{es:"La Mesa",fr:"La Table \u00e0 Manger",de:"Der Esstisch",it:"Il Tavolo",hi:"\u0916\u093e\u0928\u0947 \u0915\u0940 \u092e\u0947\u091c"},
+            "toilet":{es:"El Inodoro",fr:"Les Toilettes",de:"Die Toilette",it:"Il WC",hi:"\u0936\u094c\u091a\u093e\u0932\u092f"},
+            "tv":{es:"El Televisor",fr:"La T\u00e9l\u00e9vision",de:"Der Fernseher",it:"Il Televisore",hi:"\u091f\u0940\u0935\u0940"},
+            "laptop":{es:"La Computadora",fr:"L'Ordinateur",de:"Der Laptop",it:"Il Portatile",hi:"\u0932\u0948\u092a\u091f\u0949\u092a"},
+            "mouse":{es:"El Rat\u00f3n",fr:"La Souris",de:"Die Maus",it:"Il Mouse",hi:"\u092e\u093e\u0909\u0938"},
+            "remote":{es:"El Mando",fr:"La T\u00e9l\u00e9commande",de:"Die Fernbedienung",it:"Il Telecomando",hi:"\u0930\u093f\u092e\u094b\u091f"},
+            "keyboard":{es:"El Teclado",fr:"Le Clavier",de:"Die Tastatur",it:"La Tastiera",hi:"\u0915\u0940\u092c\u094b\u0930\u094d\u0921"},
+            "cell phone":{es:"El Celular",fr:"Le T\u00e9l\u00e9phone",de:"Das Handy",it:"Il Cellulare",hi:"\u092e\u094b\u092c\u093e\u0907\u0932 \u092b\u094b\u0928"},
+            "microwave":{es:"El Microondas",fr:"Le Micro-ondes",de:"Die Mikrowelle",it:"Il Microonde",hi:"\u092e\u093e\u0907\u0915\u094d\u0930\u094b\u0935\u0947\u0935"},
+            "oven":{es:"El Horno",fr:"Le Four",de:"Der Ofen",it:"Il Forno",hi:"\u0913\u0935\u0928"},
+            "toaster":{es:"La Tostadora",fr:"Le Grille-pain",de:"Der Toaster",it:"Il Tostapane",hi:"\u091f\u094b\u0938\u094d\u091f\u0930"},
+            "sink":{es:"El Fregadero",fr:"L'\u00c9vier",de:"Das Waschbecken",it:"Il Lavandino",hi:"\u0938\u093f\u0902\u0915"},
+            "refrigerator":{es:"El Refrigerador",fr:"Le R\u00e9frig\u00e9rateur",de:"Der K\u00fchlschrank",it:"Il Frigorifero",hi:"\u092b\u094d\u0930\u093f\u091c"},
+            "book":{es:"El Libro",fr:"Le Livre",de:"Das Buch",it:"Il Libro",hi:"\u0915\u093f\u0924\u093e\u092c"},
+            "clock":{es:"El Reloj",fr:"L'Horloge",de:"Die Uhr",it:"L'Orologio",hi:"\u0918\u0921\u093c\u0940"},
+            "vase":{es:"El Jarr\u00f3n",fr:"Le Vase",de:"Die Vase",it:"Il Vaso",hi:"\u092b\u0942\u0932\u0926\u093e\u0928"},
+            "scissors":{es:"Las Tijeras",fr:"Les Ciseaux",de:"Die Schere",it:"Le Forbici",hi:"\u0915\u0948\u0902\u091a\u0940"},
+            "teddy bear":{es:"El Oso de Peluche",fr:"L'Ours en Peluche",de:"Der Teddyb\u00e4r",it:"L'Orsacchiotto",hi:"\u091f\u0947\u0921\u0940 \u092c\u093f\u092f\u0930"},
+            "hair drier":{es:"El Secador",fr:"Le S\u00e8che-cheveux",de:"Der Haartrockner",it:"L'Asciugacapelli",hi:"\u0939\u0947\u092f\u0930 \u0921\u094d\u0930\u093e\u092f\u0930"},
+            "toothbrush":{es:"El Cepillo",fr:"La Brosse \u00e0 Dents",de:"Die Zahnb\u00fcrste",it:"Lo Spazzolino",hi:"\u091f\u0942\u0925\u092c\u094d\u0930\u0936"}
         };
 
         const getTranslation = (word) => {
-            const lowerWord = word.toLowerCase();
-            if (dictionary[lowerWord] && dictionary[lowerWord][targetLang]) {
-                return dictionary[lowerWord][targetLang];
-            }
-            return word.charAt(0).toUpperCase() + word.slice(1);
+            const lw = word.toLowerCase();
+            return (dictionary[lw] && dictionary[lw][targetLang]) ? dictionary[lw][targetLang] : word.charAt(0).toUpperCase()+word.slice(1);
         };
 
+        // Draggable status bar
         const statusBar = document.getElementById("status-bar");
-        let isDragging = false, currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
+        let isDragging=false,currentX=0,currentY=0,initialX=0,initialY=0,xOffset=0,yOffset=0;
+        function dragStart(e){const t=e.type==="touchstart"?e.touches[0]:e;if(statusBar.contains(e.target)){isDragging=true;initialX=t.clientX-xOffset;initialY=t.clientY-yOffset;}}
+        function dragEnd(){isDragging=false;}
+        function drag(e){if(!isDragging)return;e.preventDefault();const t=e.type==="touchmove"?e.touches[0]:e;currentX=t.clientX-initialX;currentY=t.clientY-initialY;xOffset=currentX;yOffset=currentY;statusBar.style.transform=`translate3d(${currentX}px,${currentY}px,0)`;}
+        statusBar.addEventListener("mousedown",dragStart);
+        statusBar.addEventListener("touchstart",dragStart,{passive:false});
+        document.addEventListener("mouseup",dragEnd);
+        document.addEventListener("touchend",dragEnd);
+        document.addEventListener("mousemove",drag);
+        document.addEventListener("touchmove",drag,{passive:false});
 
-        function dragStart(e) {
-            if (e.type === "touchstart") {
-                initialX = e.touches[0].clientX - xOffset;
-                initialY = e.touches[0].clientY - yOffset;
-            } else {
-                initialX = e.clientX - xOffset;
-                initialY = e.clientY - yOffset;
-            }
-            if (e.target === statusBar || statusBar.contains(e.target)) isDragging = true;
+        // Use CDN wasm path - more reliable than local relative path in webviews
+        const WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm";
+        const MODEL_PATH = "./efficientdet_lite2.tflite";
+
+        async function tryCreateDetector(vision, delegate) {
+            return ObjectDetector.createFromOptions(vision, {
+                baseOptions: { modelAssetPath: MODEL_PATH, delegate },
+                scoreThreshold: 0.5,
+                runningMode: "VIDEO"
+            });
         }
-
-        function dragEnd() { initialX = currentX; initialY = currentY; isDragging = false; }
-
-        function drag(e) {
-            if (!isDragging) return;
-            e.preventDefault();
-            if (e.type === "touchmove") {
-                currentX = e.touches[0].clientX - initialX;
-                currentY = e.touches[0].clientY - initialY;
-            } else {
-                currentX = e.clientX - initialX;
-                currentY = e.clientY - initialY;
-            }
-            xOffset = currentX;
-            yOffset = currentY;
-            statusBar.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
-        }
-
-        statusBar.addEventListener("mousedown", dragStart);
-        statusBar.addEventListener("touchstart", dragStart, { passive: false });
-        document.addEventListener("mouseup", dragEnd);
-        document.addEventListener("touchend", dragEnd);
-        document.addEventListener("mousemove", drag);
-        document.addEventListener("touchmove", drag, { passive: false });
 
         async function initializeObjectDetector() {
             try {
-                statusText.innerText = "Loading WASM runtime...";
-                const vision = await FilesetResolver.forVisionTasks("./wasm");
+                statusText.innerText = "Step 1/3: Loading WASM runtime...";
+                const vision = await FilesetResolver.forVisionTasks(WASM_PATH);
 
-                statusText.innerText = "Loading EfficientDet-Lite2 model...";
-                objectDetector = await ObjectDetector.createFromOptions(vision, {
-                    baseOptions: {
-                        modelAssetPath: "./efficientdet_lite2.tflite",
-                        delegate: "GPU"
-                    },
-                    scoreThreshold: 0.5,
-                    runningMode: "VIDEO"
-                });
-
-                const langLabel = langNames[targetLang] || targetLang.toUpperCase();
-                statusText.innerText = `✓ Ready! Translating to ${langLabel}.`;
+                statusText.innerText = "Step 2/3: Loading model (GPU)...";
+                try {
+                    objectDetector = await tryCreateDetector(vision, "GPU");
+                    statusText.innerText = "\u2713 Ready (GPU)! " + (langNames[targetLang] || targetLang);
+                } catch (gpuErr) {
+                    console.warn("GPU failed, trying CPU:", gpuErr);
+                    statusText.innerText = "Step 3/3: GPU failed, retrying CPU...";
+                    objectDetector = await tryCreateDetector(vision, "CPU");
+                    statusText.innerText = "\u2713 Ready (CPU)! " + (langNames[targetLang] || targetLang);
+                }
                 startBtn.classList.remove("hidden");
             } catch (error) {
-                console.error("Error loading model:", error);
-                statusText.innerText = "Error: " + error.message;
+                console.error("Fatal error:", error);
+                statusText.innerText = "\u274c " + (error.message || String(error));
             }
         }
 
@@ -210,19 +175,13 @@
         startBtn.addEventListener("click", () => {
             if (!objectDetector) return;
             startBtn.classList.add("hidden");
-            statusText.innerText = "Analyzing environment...";
-            const constraints = { video: { facingMode: "environment" } };
-            navigator.mediaDevices.getUserMedia(constraints).then((stream) => {
-                video.srcObject = stream;
-                video.addEventListener("loadeddata", () => {
-                    webcamRunning = true;
-                    predictWebcam();
-                });
-            }).catch((err) => {
-                console.error("Camera error:", err);
-                statusText.innerText = "Camera permission denied.";
-                startBtn.classList.remove("hidden");
-            });
+            statusText.innerText = "Starting camera...";
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(stream => {
+                    video.srcObject = stream;
+                    video.addEventListener("loadeddata", () => { webcamRunning=true; predictWebcam(); });
+                })
+                .catch(err => { statusText.innerText = "Camera denied: "+err.message; startBtn.classList.remove("hidden"); });
         });
 
         async function predictWebcam() {
@@ -236,92 +195,36 @@
         }
 
         function drawDetections(result) {
-            const displayWidth = window.innerWidth;
-            const displayHeight = window.innerHeight;
-
-            if (canvasElement.width !== displayWidth || canvasElement.height !== displayHeight) {
-                canvasElement.width = displayWidth;
-                canvasElement.height = displayHeight;
-            }
-
-            canvasCtx.clearRect(0, 0, displayWidth, displayHeight);
-            if (!video.videoWidth || !video.videoHeight) return;
-
-            const videoRatio = video.videoWidth / video.videoHeight;
-            const displayRatio = displayWidth / displayHeight;
-            let drawWidth, drawHeight, startX, startY;
-
-            if (displayRatio > videoRatio) {
-                drawHeight = displayHeight;
-                drawWidth = displayHeight * videoRatio;
-                startX = (displayWidth - drawWidth) / 2;
-                startY = 0;
-            } else {
-                drawWidth = displayWidth;
-                drawHeight = displayWidth / videoRatio;
-                startX = 0;
-                startY = (displayHeight - drawHeight) / 2;
-            }
-
-            canvasCtx.drawImage(video, startX, startY, drawWidth, drawHeight);
-            const scale = drawWidth / video.videoWidth;
-
-            for (let detection of result.detections) {
-                const rawBbox = detection.boundingBox;
-                const bbox = {
-                    originX: (rawBbox.originX * scale) + startX,
-                    originY: (rawBbox.originY * scale) + startY,
-                    width: rawBbox.width * scale,
-                    height: rawBbox.height * scale
-                };
-
-                const category = detection.categories[0];
-                const englishName = category.categoryName;
-                const translatedName = getTranslation(englishName);
-                const score = Math.round(category.score * 100);
-
-                canvasCtx.lineWidth = 4;
-                canvasCtx.strokeStyle = "#10B981";
-                canvasCtx.shadowColor = '#34D399';
-                canvasCtx.shadowBlur = 15;
-
-                const cornerLength = 30;
+            const W=window.innerWidth, H=window.innerHeight;
+            if(canvasElement.width!==W||canvasElement.height!==H){canvasElement.width=W;canvasElement.height=H;}
+            canvasCtx.clearRect(0,0,W,H);
+            if(!video.videoWidth||!video.videoHeight)return;
+            const vr=video.videoWidth/video.videoHeight, dr=W/H;
+            let dw,dh,sx,sy;
+            if(dr>vr){dh=H;dw=H*vr;sx=(W-dw)/2;sy=0;}else{dw=W;dh=W/vr;sx=0;sy=(H-dh)/2;}
+            canvasCtx.drawImage(video,sx,sy,dw,dh);
+            const sc=dw/video.videoWidth;
+            for(const det of result.detections){
+                const rb=det.boundingBox;
+                const b={x:(rb.originX*sc)+sx,y:(rb.originY*sc)+sy,w:rb.width*sc,h:rb.height*sc};
+                const cat=det.categories[0];
+                const en=cat.categoryName, tr=getTranslation(en), pct=Math.round(cat.score*100);
+                const cl=30;
+                canvasCtx.lineWidth=4;canvasCtx.strokeStyle="#10B981";canvasCtx.shadowColor="#34D399";canvasCtx.shadowBlur=15;
                 canvasCtx.beginPath();
-                canvasCtx.moveTo(bbox.originX, bbox.originY + cornerLength);
-                canvasCtx.lineTo(bbox.originX, bbox.originY);
-                canvasCtx.lineTo(bbox.originX + cornerLength, bbox.originY);
-                canvasCtx.moveTo(bbox.originX + bbox.width - cornerLength, bbox.originY);
-                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY);
-                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY + cornerLength);
-                canvasCtx.moveTo(bbox.originX, bbox.originY + bbox.height - cornerLength);
-                canvasCtx.lineTo(bbox.originX, bbox.originY + bbox.height);
-                canvasCtx.lineTo(bbox.originX + cornerLength, bbox.originY + bbox.height);
-                canvasCtx.moveTo(bbox.originX + bbox.width - cornerLength, bbox.originY + bbox.height);
-                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY + bbox.height);
-                canvasCtx.lineTo(bbox.originX + bbox.width, bbox.originY + bbox.height - cornerLength);
-                canvasCtx.stroke();
-                canvasCtx.shadowBlur = 0;
-
-                canvasCtx.font = "bold 28px system-ui, sans-serif";
-                const textWidth = canvasCtx.measureText(translatedName).width;
-                const padding = 16;
-                const cardHeight = 65;
-                const cardY = bbox.originY - cardHeight - 10;
-                const cardX = bbox.originX;
-
-                canvasCtx.fillStyle = "rgba(15, 23, 42, 0.85)";
-                canvasCtx.beginPath();
-                canvasCtx.roundRect(cardX, cardY, Math.max(textWidth + padding * 2, 180), cardHeight, 12);
-                canvasCtx.fill();
-                canvasCtx.lineWidth = 2;
-                canvasCtx.strokeStyle = "rgba(16, 185, 129, 0.6)";
-                canvasCtx.stroke();
-
-                canvasCtx.fillStyle = "#FFFFFF";
-                canvasCtx.fillText(translatedName, cardX + padding, cardY + 30);
-                canvasCtx.font = "16px system-ui, sans-serif";
-                canvasCtx.fillStyle = "#94A3B8";
-                canvasCtx.fillText(`${englishName.toUpperCase()} • ${score}%`, cardX + padding, cardY + 52);
+                canvasCtx.moveTo(b.x,b.y+cl);canvasCtx.lineTo(b.x,b.y);canvasCtx.lineTo(b.x+cl,b.y);
+                canvasCtx.moveTo(b.x+b.w-cl,b.y);canvasCtx.lineTo(b.x+b.w,b.y);canvasCtx.lineTo(b.x+b.w,b.y+cl);
+                canvasCtx.moveTo(b.x,b.y+b.h-cl);canvasCtx.lineTo(b.x,b.y+b.h);canvasCtx.lineTo(b.x+cl,b.y+b.h);
+                canvasCtx.moveTo(b.x+b.w-cl,b.y+b.h);canvasCtx.lineTo(b.x+b.w,b.y+b.h);canvasCtx.lineTo(b.x+b.w,b.y+b.h-cl);
+                canvasCtx.stroke();canvasCtx.shadowBlur=0;
+                canvasCtx.font="bold 28px system-ui,sans-serif";
+                const tw=canvasCtx.measureText(tr).width, pad=16, ch=65, cy=b.y-ch-10;
+                canvasCtx.fillStyle="rgba(15,23,42,0.85)";
+                canvasCtx.beginPath();canvasCtx.roundRect(b.x,cy,Math.max(tw+pad*2,180),ch,12);canvasCtx.fill();
+                canvasCtx.lineWidth=2;canvasCtx.strokeStyle="rgba(16,185,129,0.6)";canvasCtx.stroke();
+                canvasCtx.fillStyle="#FFF";canvasCtx.fillText(tr,b.x+pad,cy+30);
+                canvasCtx.font="16px system-ui,sans-serif";canvasCtx.fillStyle="#94A3B8";
+                canvasCtx.fillText(en.toUpperCase()+" \u2022 "+pct+"%",b.x+pad,cy+52);
             }
         }
     </script>
