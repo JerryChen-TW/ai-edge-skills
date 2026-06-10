@@ -164,11 +164,11 @@
         async function initializeObjectDetector() {
             try {
                 const vision = await FilesetResolver.forVisionTasks(
-                    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+                    "./assets/wasm"
                 );
                 objectDetector = await ObjectDetector.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: "https://storage.googleapis.com/mediapipe-models/object_detector/efficientdet_lite2/float16/1/efficientdet_lite2.tflite",
+                        modelAssetPath: "./assets/efficientdet_lite2.tflite",
                         delegate: "GPU"
                     },
                     scoreThreshold: 0.55,
