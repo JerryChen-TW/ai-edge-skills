@@ -23,9 +23,9 @@
             <div id="status-bar" class="glass-panel px-3 py-2 rounded-xl text-white shadow-md pointer-events-auto absolute top-6 left-6 cursor-grab active:cursor-grabbing touch-none select-none z-50">
                 <h1 class="text-base font-bold flex items-center gap-1.5 pointer-events-none">
                     <svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129"></path></svg>
-                    MediaPipe AR Translator v2
+                    AR Translator v2 (Offline)
                 </h1>
-                <p class="text-xs text-emerald-200 mt-0.5 pointer-events-none" id="status-text">Loading MediaPipe Models...</p>
+                <p class="text-xs text-emerald-200 mt-0.5 pointer-events-none" id="status-text">Loading AI Model...</p>
             </div>
             
             <button id="start-btn" class="glass-panel px-8 py-4 rounded-full text-white font-bold text-lg pointer-events-auto self-center mb-10 hover:bg-white/20 transition-all shadow-2xl hidden transform active:scale-95 border-emerald-500/50 border-2 mt-auto">
@@ -63,15 +63,35 @@
             "truck": { es: "El Camión", fr: "Le Camion", de: "Der LKW", it: "Il Camion", hi: "ट्रक" },
             "boat": { es: "El Barco", fr: "Le Bateau", de: "Das Boot", it: "La Barca", hi: "नाव" },
             "traffic light": { es: "El Semáforo", fr: "Le Feu de Circulation", de: "Die Ampel", it: "Il Semaforo", hi: "ट्रैफ़िक लाइट" },
+            "fire hydrant": { es: "La Boca de Incendio", fr: "La Bouche d'Incendie", de: "Der Hydrant", it: "L'Idrante", hi: "अग्निशामक" },
+            "stop sign": { es: "La Señal de Stop", fr: "Le Panneau Stop", de: "Das Stoppschild", it: "Il Segnale di Stop", hi: "स्टॉप साइन" },
+            "parking meter": { es: "El Parquímetro", fr: "Le Parcmètre", de: "Die Parkuhr", it: "Il Parchimetro", hi: "पार्किंग मीटर" },
+            "bench": { es: "El Banco", fr: "Le Banc", de: "Die Bank", it: "La Panchina", hi: "बेंच" },
             "bird": { es: "El Pájaro", fr: "L'Oiseau", de: "Der Vogel", it: "L'Uccello", hi: "पक्षी" },
             "cat": { es: "El Gato", fr: "Le Chat", de: "Die Katze", it: "Il Gatto", hi: "बिल्ली" },
             "dog": { es: "El Perro", fr: "Le Chien", de: "Der Hund", it: "Il Cane", hi: "कुत्ता" },
             "horse": { es: "El Caballo", fr: "Le Cheval", de: "Das Pferd", it: "Il Cavallo", hi: "घोड़ा" },
+            "sheep": { es: "La Oveja", fr: "Le Mouton", de: "Das Schaf", it: "La Pecora", hi: "भेड़" },
+            "cow": { es: "La Vaca", fr: "La Vache", de: "Die Kuh", it: "La Mucca", hi: "गाय" },
+            "elephant": { es: "El Elefante", fr: "L'Éléphant", de: "Der Elefant", it: "L'Elefante", hi: "हाथी" },
+            "bear": { es: "El Oso", fr: "L'Ours", de: "Der Bär", it: "L'Orso", hi: "भालू" },
+            "zebra": { es: "La Cebra", fr: "Le Zèbre", de: "Das Zebra", it: "La Zebra", hi: "ज़ेबरा" },
+            "giraffe": { es: "La Jirafa", fr: "La Girafe", de: "Die Giraffe", it: "La Giraffa", hi: "जिराफ़" },
             "backpack": { es: "La Mochila", fr: "Le Sac à Dos", de: "Der Rucksack", it: "Lo Zaino", hi: "बैकपैक" },
             "umbrella": { es: "El Paraguas", fr: "Le Parapluie", de: "Der Regenschirm", it: "L'Ombrello", hi: "छाता" },
             "handbag": { es: "El Bolso", fr: "Le Sac à Main", de: "Die Handtasche", it: "La Borsa", hi: "हैंडबैग" },
             "tie": { es: "La Corbata", fr: "La Cravate", de: "Die Krawatte", it: "La Cravatta", hi: "टाई" },
             "suitcase": { es: "La Maleta", fr: "La Valise", de: "Der Koffer", it: "La Valigia", hi: "सूटकेस" },
+            "frisbee": { es: "El Frisbee", fr: "Le Frisbee", de: "Die Frisbee", it: "Il Frisbee", hi: "फ्रिस्बी" },
+            "skis": { es: "Los Esquís", fr: "Les Skis", de: "Die Skier", it: "Gli Sci", hi: "स्की" },
+            "snowboard": { es: "El Snowboard", fr: "Le Snowboard", de: "Das Snowboard", it: "Lo Snowboard", hi: "स्नोबोर्ड" },
+            "sports ball": { es: "La Pelota", fr: "Le Ballon", de: "Der Ball", it: "La Palla", hi: "खेल की गेंद" },
+            "kite": { es: "La Cometa", fr: "Le Cerf-volant", de: "Der Drachen", it: "L'Aquilone", hi: "पतंग" },
+            "baseball bat": { es: "El Bate", fr: "La Batte", de: "Der Baseballschläger", it: "La Mazza", hi: "बेसबॉल बैट" },
+            "baseball glove": { es: "El Guante", fr: "Le Gant", de: "Der Handschuh", it: "Il Guanto", hi: "बेसबॉल दस्ताना" },
+            "skateboard": { es: "El Monopatín", fr: "Le Skateboard", de: "Das Skateboard", it: "Lo Skateboard", hi: "स्केटबोर्ड" },
+            "surfboard": { es: "La Tabla de Surf", fr: "La Planche de Surf", de: "Das Surfbrett", it: "La Tavola da Surf", hi: "सर्फ़बोर्ड" },
+            "tennis racket": { es: "La Raqueta", fr: "La Raquette", de: "Der Tennisschläger", it: "La Racchetta", hi: "टेनिस रैकेट" },
             "bottle": { es: "La Botella", fr: "La Bouteille", de: "Die Flasche", it: "La Bottiglia", hi: "बोतल" },
             "wine glass": { es: "La Copa de Vino", fr: "Le Verre à Vin", de: "Das Weinglas", it: "Il Calice", hi: "शराब का गिलास" },
             "cup": { es: "La Taza", fr: "La Tasse", de: "Die Tasse", it: "La Tazza", hi: "कप" },
@@ -163,24 +183,25 @@
 
         async function initializeObjectDetector() {
             try {
-                const vision = await FilesetResolver.forVisionTasks(
-                    "./assets/wasm"
-                );
+                statusText.innerText = "Loading WASM runtime...";
+                const vision = await FilesetResolver.forVisionTasks("./wasm");
+
+                statusText.innerText = "Loading EfficientDet-Lite2 model...";
                 objectDetector = await ObjectDetector.createFromOptions(vision, {
                     baseOptions: {
-                        modelAssetPath: "./assets/efficientdet_lite2.tflite",
+                        modelAssetPath: "./efficientdet_lite2.tflite",
                         delegate: "GPU"
                     },
-                    scoreThreshold: 0.55,
+                    scoreThreshold: 0.5,
                     runningMode: "VIDEO"
                 });
-                
+
                 const langLabel = langNames[targetLang] || targetLang.toUpperCase();
-                statusText.innerText = `Ready! Translating to ${langLabel}.`;
+                statusText.innerText = `✓ Ready! Translating to ${langLabel}.`;
                 startBtn.classList.remove("hidden");
             } catch (error) {
                 console.error("Error loading model:", error);
-                statusText.innerText = "Error loading AI model. Check your connection.";
+                statusText.innerText = "Error: " + error.message;
             }
         }
 
@@ -217,7 +238,7 @@
         function drawDetections(result) {
             const displayWidth = window.innerWidth;
             const displayHeight = window.innerHeight;
-            
+
             if (canvasElement.width !== displayWidth || canvasElement.height !== displayHeight) {
                 canvasElement.width = displayWidth;
                 canvasElement.height = displayHeight;
@@ -241,7 +262,7 @@
                 startX = 0;
                 startY = (displayHeight - drawHeight) / 2;
             }
-            
+
             canvasCtx.drawImage(video, startX, startY, drawWidth, drawHeight);
             const scale = drawWidth / video.videoWidth;
 
@@ -263,7 +284,7 @@
                 canvasCtx.strokeStyle = "#10B981";
                 canvasCtx.shadowColor = '#34D399';
                 canvasCtx.shadowBlur = 15;
-                
+
                 const cornerLength = 30;
                 canvasCtx.beginPath();
                 canvasCtx.moveTo(bbox.originX, bbox.originY + cornerLength);
@@ -300,7 +321,7 @@
                 canvasCtx.fillText(translatedName, cardX + padding, cardY + 30);
                 canvasCtx.font = "16px system-ui, sans-serif";
                 canvasCtx.fillStyle = "#94A3B8";
-                canvasCtx.fillText(`${englishName.toUpperCase()} • ${score}% Match`, cardX + padding, cardY + 52);
+                canvasCtx.fillText(`${englishName.toUpperCase()} • ${score}%`, cardX + padding, cardY + 52);
             }
         }
     </script>
