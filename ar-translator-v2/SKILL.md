@@ -1,6 +1,9 @@
 ---
 name: ar-translator-v2
 description: AR Translator v2 with higher accuracy model (EfficientDet-Lite2). Opens the camera and translates real-world objects in real-time using on-device object detection.
+js:
+  path: scripts/index.html
+  output_type: webview
 ---
 
 ## Instructions
